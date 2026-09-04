@@ -58,6 +58,17 @@ class _ScannerPageState extends State<ScannerPage> {
     }
   }
 
+  Future<void> _deleteCapturedFile(String path) async {
+    try {
+      final file = File(path);
+      if (await file.exists()) {
+        await file.delete();
+      }
+    } catch (_) {
+      // Best-effort cleanup; never block the user on local file deletion.
+    }
+  }
+
   Future<void> _scan() async {
     final controller = _controller;
     if (controller == null || !controller.value.isInitialized || _busy) return;
@@ -107,7 +118,7 @@ class _ScannerPageState extends State<ScannerPage> {
 
       // Privacy rule: the captured selfie is temporary and is deleted before
       // navigating to the results screen. Only the embedding is used remotely.
-      await File(file.path).delete().catchError((_) {});
+      await _deleteCapturedFile(file.path);
       capturedPath = null;
 
       if (!mounted) return;
@@ -125,10 +136,9 @@ class _ScannerPageState extends State<ScannerPage> {
         });
       }
     } finally {
-      if (capturedPath != null) {
-        try {
-          await File(capturedPath!).delete();
-        } catch (_) {}
+      final path = capturedPath;
+      if (path != null) {
+        await _deleteCapturedFile(path);
       }
     }
   }
