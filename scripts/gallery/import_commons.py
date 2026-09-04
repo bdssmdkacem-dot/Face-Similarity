@@ -18,9 +18,9 @@ EMBED_URL = "https://huggingface.co/LibreYOLO/librefacerec-l/resolve/main/libref
 EMBED_SHA256 = "a7933ea5330113b01c9b60351d8f4c33003f145d8470ac5f0e52ee2effe25c60"
 DET_URL = "https://huggingface.co/LibreYOLO/librefacerec-det/resolve/main/librefacerec-det.onnx?download=true"
 DET_SHA256 = "8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4"
+USER_AGENT = "ShabahGalleryImporter/1.4 (https://github.com/bdssmdkacem-dot/Face-Similarity)"
 
 DST = np.array([[38.2946, 51.6963], [73.5318, 51.5014], [56.0252, 71.7366], [41.5493, 92.3655], [70.7299, 92.2041]], dtype=np.float32)
-ALLOWED_LICENSES = {"CC BY", "CC BY-SA", "CC0", "Public domain", "PDM"}
 
 
 def sha256_file(path: Path) -> str:
@@ -39,7 +39,7 @@ def download_verified(url: str, path: Path, expected_sha256: str) -> None:
     tmp = path.with_suffix(path.suffix + ".tmp")
     for attempt in range(1, 4):
         try:
-            r = requests.get(url, timeout=180, stream=True, headers={"User-Agent": "ShabahGalleryImporter/1.3"})
+            r = requests.get(url, timeout=180, stream=True, headers={"User-Agent": USER_AGENT})
             r.raise_for_status()
             with tmp.open("wb") as f:
                 for chunk in r.iter_content(1024 * 1024):
@@ -60,22 +60,71 @@ def download_verified(url: str, path: Path, expected_sha256: str) -> None:
             time.sleep(attempt)
 
 
+def _retry_after(response: requests.Response, fallback: float) -> float:
+    value = response.headers.get("Retry-After", "").strip()
+    try:
+        return max(1.0, min(float(value), 3600.0))
+    except ValueError:
+        return fallback
+
+
 def commons_candidates(name: str, limit: int = 12) -> list[dict]:
-    params = {"action": "query", "format": "json", "generator": "search", "gsrsearch": f'File:"{name}"', "gsrnamespace": 6, "gsrlimit": limit, "prop": "imageinfo", "iiprop": "url|extmetadata", "iiurlwidth": 1200}
-    r = requests.get(COMMONS_API, params=params, timeout=30, headers={"User-Agent": "ShabahGalleryImporter/1.3"})
-    r.raise_for_status()
-    pages = r.json().get("query", {}).get("pages", {})
-    out = []
-    for page in pages.values():
-        info = (page.get("imageinfo") or [{}])[0]
-        meta = info.get("extmetadata") or {}
-        license_name = (meta.get("LicenseShortName", {}).get("value") or "").strip()
-        if license_name not in ALLOWED_LICENSES:
-            continue
-        image_url = info.get("thumburl") or info.get("url")
-        if image_url:
-            out.append({"title": page.get("title", ""), "image_url": image_url, "source_url": "https://commons.wikimedia.org/wiki/" + quote(page.get("title", "").replace(" ", "_")), "license_type": license_name})
-    return out
+    params = {
+        "action": "query",
+        "format": "json",
+        "generator": "search",
+        "gsrsearch": f'File:"{name}"',
+        "gsrnamespace": 6,
+        "gsrlimit": limit,
+        "prop": "imageinfo",
+        "iiprop": "url|extmetadata",
+        "iiurlwidth": 960,
+    }
+    headers = {"User-Agent": USER_AGENT, "Accept": "application/json"}
+    for attempt in range(1, 5):
+        try:
+            r = requests.get(COMMONS_API, params=params, timeout=30, headers=headers)
+            if r.status_code in (429, 503):
+                wait = _retry_after(r, min(60.0, 2.0 ** attempt))
+                print(f"  Commons rate limit/server busy ({r.status_code}); waiting {wait:.0f}s")
+                time.sleep(wait)
+                continue
+            r.raise_for_status()
+            pages = r.json().get("query", {}).get("pages", {})
+            out = []
+            for page in pages.values():
+                info = (page.get("imageinfo") or [{}])[0]
+                meta = info.get("extmetadata") or {}
+                license_name = (meta.get("LicenseShortName", {}).get("value") or "").strip()
+                normalized = license_name.casefold()
+                allowed_base = normalized.startswith("cc by") or normalized in {"cc0", "public domain", "pdm"}
+                forbidden = (
+                    "noncommercial" in normalized
+                    or "no derivatives" in normalized
+                    or normalized.endswith("-nc")
+                    or normalized.endswith("-nd")
+                    or " cc nc" in f" {normalized}"
+                    or " cc nd" in f" {normalized}"
+                )
+                if not allowed_base or forbidden:
+                    continue
+                image_url = info.get("thumburl") or info.get("url")
+                if image_url:
+                    out.append({
+                        "title": page.get("title", ""),
+                        "image_url": image_url,
+                        "source_url": "https://commons.wikimedia.org/wiki/" + quote(page.get("title", "").replace(" ", "_")),
+                        "license_type": license_name,
+                    })
+            return out
+        except requests.RequestException as exc:
+            if attempt == 4:
+                print(f"  Commons lookup failed after retries: {exc}")
+                return []
+            wait = min(30.0, 2.0 ** attempt)
+            print(f"  Commons lookup error; retrying in {wait:.0f}s: {exc}")
+            time.sleep(wait)
+    return []
 
 
 def slugify(name: str) -> str:
@@ -83,9 +132,6 @@ def slugify(name: str) -> str:
 
 
 def rest_headers(key: str) -> dict[str, str]:
-    # New Supabase sb_secret_* keys are opaque API keys, not JWTs.
-    # Sending them as Authorization: Bearer makes PostgREST treat them as a user token
-    # and can cause RLS errors. The apikey header is the correct server-side path.
     return {"apikey": key, "Content-Type": "application/json", "Prefer": "return=representation"}
 
 
@@ -183,6 +229,7 @@ def main() -> int:
         candidates = commons_candidates(name)
         if not candidates:
             print("  no acceptable licensed Commons portrait found")
+            time.sleep(1.5)
             continue
         slug = slugify(name)
         celeb = get_existing_celebrity(base, key, slug)
@@ -198,7 +245,12 @@ def main() -> int:
                 continue
             image_path = cache / f"{slug}-{index}.jpg"
             try:
-                response = session.get(candidate["image_url"], timeout=60, headers={"User-Agent": "ShabahGalleryImporter/1.3"})
+                response = session.get(candidate["image_url"], timeout=60, headers={"User-Agent": USER_AGENT})
+                if response.status_code in (429, 503):
+                    wait = _retry_after(response, 10.0)
+                    print(f"  image server busy ({response.status_code}); waiting {wait:.0f}s")
+                    time.sleep(wait)
+                    continue
                 response.raise_for_status()
                 image_path.write_bytes(response.content)
                 result = embed_image(image_path, detector, embedder)
@@ -220,7 +272,7 @@ def main() -> int:
             print(f"  imported {inserted_embeddings} new embedding(s)")
         else:
             print("  no usable face embedding; celebrity remains inactive")
-        time.sleep(0.2)
+        time.sleep(1.5)
     print(f"[gallery] active celebrities processed: {imported}/{len(names)}")
     return 0
 
