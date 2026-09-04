@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'dart:ui' show Rect;
 
 import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_onnxruntime/flutter_onnxruntime.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'package:image/image.dart' as img;
@@ -23,8 +24,17 @@ class FaceEmbeddingService {
   Future<List<double>> embed({
     required String imagePath,
     required Face face,
+    void Function(String status)? onStatus,
   }) async {
-    final session = await _getSession();
+    onStatus?.call('جاري تهيئة محرك الذكاء الاصطناعي…');
+    final session = await _getSession(onStatus: onStatus).timeout(
+      const Duration(seconds: 120),
+      onTimeout: () => throw TimeoutException(
+        'تهيئة نموذج الوجه تجاوزت المهلة.',
+      ),
+    );
+
+    onStatus?.call('جاري تجهيز صورة الوجه…');
     final imageBytes = await File(imagePath).readAsBytes();
     final source = img.decodeImage(imageBytes);
     if (source == null) throw StateError('تعذر قراءة الصورة.');
@@ -34,15 +44,23 @@ class FaceEmbeddingService {
     final inputName = session.inputNames.first;
     final outputName = session.outputNames.first;
 
-    // The face model expects FLOAT32 NCHW. Using Float32List prevents the
-    // ONNX Runtime Android backend from receiving a FLOAT64 tensor.
     final inputTensor = await OrtValue.fromList(
       Float32List.fromList(input),
       [1, 3, 112, 112],
     );
     Map<String, OrtValue>? outputs;
     try {
-      outputs = await session.run({inputName: inputTensor});
+      onStatus?.call('جاري تشغيل نموذج الوجه…');
+      final stopwatch = Stopwatch()..start();
+      outputs = await session.run({inputName: inputTensor}).timeout(
+        const Duration(seconds: 60),
+        onTimeout: () => throw TimeoutException(
+          'استدلال نموذج الوجه تجاوز 60 ثانية.',
+        ),
+      );
+      stopwatch.stop();
+      debugPrint('Shabah ONNX inference: ${stopwatch.elapsedMilliseconds} ms');
+
       final output = outputs[outputName];
       if (output == null) throw StateError('نموذج الوجه لم يُرجع embedding.');
 
@@ -54,6 +72,7 @@ class FaceEmbeddingService {
           'Embedding dimension mismatch: expected 512, got ${values.length}.',
         );
       }
+      onStatus?.call('تم إنشاء بصمة الوجه.');
       return _l2Normalize(values);
     } finally {
       await inputTensor.dispose();
@@ -65,42 +84,70 @@ class FaceEmbeddingService {
     }
   }
 
-  Future<OrtSession> _getSession() async {
+  Future<OrtSession> _getSession({void Function(String status)? onStatus}) async {
     if (_session != null) return _session!;
-    final modelFile = await _ensureModelFile();
+
+    onStatus?.call('جاري تجهيز نموذج الوجه…');
+    final modelFile = await _ensureModelFile(onStatus: onStatus);
+
+    onStatus?.call('جاري تحميل النموذج داخل الجهاز…');
     _runtime = OnnxRuntime();
-    _session = await _runtime!.createSession(modelFile.path);
-    return _session!;
+    final session = await _runtime!.createSession(modelFile.path).timeout(
+      const Duration(seconds: 90),
+      onTimeout: () => throw TimeoutException(
+        'تحميل نموذج الوجه داخل ONNX Runtime تجاوز 90 ثانية.',
+      ),
+    );
+    _session = session;
+    return session;
   }
 
-  Future<File> _ensureModelFile() async {
+  Future<File> _ensureModelFile({void Function(String status)? onStatus}) async {
     final directory = await getApplicationSupportDirectory();
     final file = File('${directory.path}/$_modelFileName');
 
     if (await file.exists()) {
+      onStatus?.call('جاري التحقق من نموذج الوجه…');
       final digest = await sha256.bind(file.openRead()).first;
       if (digest.toString() == _expectedSha256) return file;
       await file.delete();
     }
 
+    onStatus?.call('جاري تنزيل نموذج الوجه لأول مرة…');
     final client = HttpClient();
     try {
-      final request = await client.getUrl(Uri.parse(_modelUrl));
+      final request = await client.getUrl(Uri.parse(_modelUrl)).timeout(
+        const Duration(seconds: 30),
+      );
       request.headers.set(HttpHeaders.userAgentHeader, 'Shabah/0.1 Android');
-      final response = await request.close();
+      final response = await request.close().timeout(
+        const Duration(seconds: 60),
+      );
       if (response.statusCode != HttpStatus.ok) {
         throw HttpException(
           'Model download failed with HTTP ${response.statusCode}.',
         );
       }
 
+      final total = response.contentLength;
+      var received = 0;
       final sink = file.openWrite();
       try {
-        await response.pipe(sink);
+        await for (final chunk in response) {
+          sink.add(chunk);
+          received += chunk.length;
+          if (total > 0) {
+            final percent = (received * 100 / total).clamp(0, 100).round();
+            if (percent % 10 == 0) {
+              onStatus?.call('جاري تنزيل نموذج الوجه… $percent%');
+            }
+          }
+        }
       } finally {
         await sink.close();
       }
 
+      onStatus?.call('جاري التحقق من نموذج الوجه…');
       final digest = await sha256.bind(file.openRead()).first;
       if (digest.toString() != _expectedSha256) {
         await file.delete();
