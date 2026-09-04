@@ -5,11 +5,9 @@ import '../../../data/celebrity_match_repository.dart';
 class ResultsPage extends StatelessWidget {
   const ResultsPage({
     super.key,
-    required this.imagePath,
     required this.matches,
   });
 
-  final String imagePath;
   final List<CelebrityMatch> matches;
 
   @override
