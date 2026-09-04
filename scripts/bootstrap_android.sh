@@ -7,6 +7,10 @@ if [ ! -d android ]; then
   flutter create --platforms=android --org com.shabah .
 fi
 
+# flutter create may add a sample test that references the default MyApp.
+# This repository has its own app entry point, so remove the stale sample.
+rm -f test/widget_test.dart
+
 # ONNX Runtime must be retained by R8/ProGuard.
 mkdir -p android/app
 cat > android/app/proguard-rules.pro <<'EOF'
