@@ -1,18 +1,5 @@
 #!/usr/bin/env python3
-"""Import licensed celebrity portraits from Wikimedia Commons into Supabase.
-
-Required environment variables:
-  SUPABASE_URL
-  SUPABASE_SERVICE_ROLE_KEY
-
-The service-role key is intentionally required only by this offline/admin
-pipeline and must never be placed in Flutter or committed to GitHub.
-
-Pipeline:
-  names -> Commons search -> license check -> image download -> YuNet 5-point
-  detection -> ArcFace 112x112 alignment -> LibreFaceRec/AuraFace 512-d
-  embedding -> Supabase celebs/images/embeddings.
-"""
+"""Import licensed celebrity portraits from Wikimedia Commons into Supabase."""
 from __future__ import annotations
 
 import argparse
@@ -32,25 +19,12 @@ EMBED_SHA256 = "a7933ea5330113b01c9b60351d8f4c33003f145d847ac5f0e52ee2effe25c60"
 DET_URL = "https://huggingface.co/LibreYOLO/librefacerec-det/resolve/main/librefacerec-det.onnx"
 DET_SHA256 = "8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4"
 
-# Standard ArcFace 112x112 five-point template.
 DST = np.array(
-    [
-        [38.2946, 51.6963],
-        [73.5318, 51.5014],
-        [56.0252, 71.7366],
-        [41.5493, 92.3655],
-        [70.7299, 92.2041],
-    ],
-    dtype=np.float32,
+    [[38.2946, 51.6963], [73.5318, 51.5014], [56.0252, 71.7366],
+     [41.5493, 92.3655], [70.7299, 92.2041]], dtype=np.float32
 )
 
-ALLOWED_LICENSE_PREFIXES = (
-    "CC BY",
-    "CC BY-SA",
-    "CC0",
-    "Public domain",
-    "PDM",
-)
+ALLOWED_LICENSE_PREFIXES = ("CC BY", "CC BY-SA", "CC0", "Public domain", "PDM")
 
 
 def sha256_file(path: Path) -> str:
@@ -79,17 +53,12 @@ def download_verified(url: str, path: Path, expected_sha256: str) -> None:
 
 def commons_candidates(name: str, limit: int = 12) -> list[dict]:
     params = {
-        "action": "query",
-        "format": "json",
-        "generator": "search",
-        "gsrsearch": f'File:"{name}"',
-        "gsrnamespace": 6,
-        "gsrlimit": limit,
-        "prop": "imageinfo",
-        "iiprop": "url|extmetadata",
-        "iiurlwidth": 1200,
+        "action": "query", "format": "json", "generator": "search",
+        "gsrsearch": f'File:"{name}"', "gsrnamespace": 6, "gsrlimit": limit,
+        "prop": "imageinfo", "iiprop": "url|extmetadata", "iiurlwidth": 1200,
     }
-    r = requests.get(COMMONS_API, params=params, timeout=30, headers={"User-Agent": "ShabahGalleryImporter/1.0"})
+    r = requests.get(COMMONS_API, params=params, timeout=30,
+                     headers={"User-Agent": "ShabahGalleryImporter/1.0"})
     r.raise_for_status()
     pages = r.json().get("query", {}).get("pages", {})
     out = []
@@ -101,20 +70,29 @@ def commons_candidates(name: str, limit: int = 12) -> list[dict]:
             continue
         image_url = info.get("thumburl") or info.get("url")
         if image_url:
-            out.append(
-                {
-                    "title": page.get("title", ""),
-                    "image_url": image_url,
-                    "source_url": "https://commons.wikimedia.org/wiki/" + quote(page.get("title", "").replace(" ", "_")),
-                    "license_type": license_name,
-                    "artist": (meta.get("Artist", {}).get("value") or "").strip(),
-                }
-            )
+            out.append({
+                "title": page.get("title", ""),
+                "image_url": image_url,
+                "source_url": "https://commons.wikimedia.org/wiki/" + quote(page.get("title", "").replace(" ", "_")),
+                "license_type": license_name,
+            })
     return out
 
 
 def slugify(name: str) -> str:
     return "".join(c.lower() if c.isalnum() else "-" for c in name).strip("-").replace("--", "-")
+
+
+def get_existing_celebrity(base: str, key: str, slug: str) -> dict | None:
+    r = requests.get(
+        f"{base}/rest/v1/celebs",
+        headers=rest_headers(key),
+        params={"slug": f"eq.{slug}", "select": "id,name,slug,is_active", "limit": "1"},
+        timeout=30,
+    )
+    r.raise_for_status()
+    rows = r.json()
+    return rows[0] if rows else None
 
 
 def detect_landmarks(detector: cv2.FaceDetectorYN, image: np.ndarray) -> tuple[np.ndarray, float] | None:
@@ -123,21 +101,14 @@ def detect_landmarks(detector: cv2.FaceDetectorYN, image: np.ndarray) -> tuple[n
     _, faces = detector.detect(image)
     if faces is None or len(faces) == 0:
         return None
-    # YuNet: x,y,w,h, 5 landmarks, score. Choose highest confidence.
     face = max(faces, key=lambda row: float(row[14]))
-    kps = np.array(
-        [
-            [face[4], face[5]],
-            [face[6], face[7]],
-            [face[8], face[9]],
-            [face[12], face[13]],
-            [face[10], face[11]],
-        ],
-        dtype=np.float32,
-    )
-    # OpenCV YuNet order is right eye, left eye, nose, right mouth, left mouth;
-    # reorder to ArcFace convention: left eye, right eye, nose, left mouth, right mouth.
-    kps = kps[[1, 0, 2, 4, 3]]
+    # YuNet: right eye, left eye, nose, right mouth, left mouth.
+    # ArcFace: left eye, right eye, nose, left mouth, right mouth.
+    kps = np.array([
+        [face[4], face[5]], [face[6], face[7]], [face[8], face[9]],
+        [face[12], face[13]], [face[10], face[11]],
+    ], dtype=np.float32)
+    kps = kps[[1, 0, 2, 3, 4]]
     return kps, float(face[14])
 
 
@@ -155,8 +126,6 @@ def embed_image(path: Path, detector: cv2.FaceDetectorYN, session: cv2.dnn.Net) 
     aligned = cv2.warpAffine(image, matrix, (112, 112), flags=cv2.INTER_LINEAR, borderValue=(0, 0, 0))
     rgb = cv2.cvtColor(aligned, cv2.COLOR_BGR2RGB).astype(np.float32)
     tensor = ((rgb - 127.5) / 127.5).transpose(2, 0, 1)[None, ...]
-    input_name = session.getLayerNames()[0] if False else None
-    # cv2.dnn.Net uses the single input blob without requiring a named input.
     session.setInput(tensor)
     output = session.forward().reshape(-1).astype(np.float32)
     if output.size != 512:
@@ -205,7 +174,6 @@ def main() -> int:
 
     detector = cv2.FaceDetectorYN.create(str(det_model), "", (640, 640), 0.55, 0.3, 5000)
     embedder = cv2.dnn.readNetFromONNX(str(embed_model))
-
     names = read_names(Path(args.names))
     if args.limit:
         names = names[: args.limit]
@@ -219,11 +187,27 @@ def main() -> int:
             print("  no acceptable licensed Commons portrait found")
             continue
 
-        celeb = rest_insert(base, key, "celebs", {"name": name, "slug": slugify(name), "is_active": False, "popularity_score": 0})
+        slug = slugify(name)
+        celeb = get_existing_celebrity(base, key, slug)
+        if celeb is None:
+            celeb = rest_insert(base, key, "celebs", {"name": name, "slug": slug, "is_active": False, "popularity_score": 0})
         celeb_id = celeb["id"]
+
+        # Existing source URLs are skipped so re-running the workflow is idempotent.
+        existing = requests.get(
+            f"{base}/rest/v1/celebrity_images",
+            headers=rest_headers(key),
+            params={"celebrity_id": f"eq.{celeb_id}", "select": "source_url"},
+            timeout=30,
+        )
+        existing.raise_for_status()
+        existing_sources = {row["source_url"] for row in existing.json()}
+
         inserted_embeddings = 0
         for index, candidate in enumerate(candidates[: args.max_per_celebrity]):
-            image_path = cache / f"{slugify(name)}-{index}.jpg"
+            if candidate["source_url"] in existing_sources:
+                continue
+            image_path = cache / f"{slug}-{index}.jpg"
             try:
                 response = session.get(candidate["image_url"], timeout=60, headers={"User-Agent": "ShabahGalleryImporter/1.0"})
                 response.raise_for_status()
@@ -232,54 +216,40 @@ def main() -> int:
                 if result is None:
                     continue
                 embedding, quality = result
-                image_row = rest_insert(
-                    base,
-                    key,
-                    "celebrity_images",
-                    {
-                        "celebrity_id": celeb_id,
-                        "image_url": candidate["image_url"],
-                        "source_name": "Wikimedia Commons",
-                        "source_url": candidate["source_url"],
-                        "license_type": candidate["license_type"],
-                        "is_primary": inserted_embeddings == 0,
-                    },
-                )
-                rest_insert(
-                    base,
-                    key,
-                    "celebrity_embeddings",
-                    {
-                        "celebrity_id": celeb_id,
-                        "image_id": image_row["id"],
-                        "embedding": embedding,
-                        "quality_score": quality,
-                        "model_name": "librefacerec-l",
-                    },
-                )
+                image_row = rest_insert(base, key, "celebrity_images", {
+                    "celebrity_id": celeb_id,
+                    "image_url": candidate["image_url"],
+                    "source_name": "Wikimedia Commons",
+                    "source_url": candidate["source_url"],
+                    "license_type": candidate["license_type"],
+                    "is_primary": not existing_sources and inserted_embeddings == 0,
+                })
+                rest_insert(base, key, "celebrity_embeddings", {
+                    "celebrity_id": celeb_id,
+                    "image_id": image_row["id"],
+                    "embedding": embedding,
+                    "quality_score": quality,
+                })
+                existing_sources.add(candidate["source_url"])
                 inserted_embeddings += 1
             except Exception as exc:
                 print(f"  skipped candidate: {exc}")
             finally:
                 image_path.unlink(missing_ok=True)
 
-        if inserted_embeddings:
-            # Activate only after at least one verified embedding exists.
+        if inserted_embeddings or celeb.get("is_active"):
             patch = requests.patch(
                 f"{base}/rest/v1/celebs?id=eq.{celeb_id}",
-                headers=rest_headers(key),
-                json={"is_active": True},
-                timeout=30,
+                headers=rest_headers(key), json={"is_active": True}, timeout=30,
             )
             patch.raise_for_status()
             imported += 1
-            print(f"  imported {inserted_embeddings} embedding(s)")
+            print(f"  imported {inserted_embeddings} new embedding(s)")
         else:
-            # Keep the metadata row inactive if no usable face was extracted.
             print("  no usable face embedding; celebrity remains inactive")
         time.sleep(0.2)
 
-    print(f"[gallery] active celebrities imported: {imported}/{len(names)}")
+    print(f"[gallery] active celebrities processed: {imported}/{len(names)}")
     return 0
 
 
