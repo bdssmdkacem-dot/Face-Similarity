@@ -1,0 +1,43 @@
+name: Gallery import
+
+on:
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: "Number of catalog entries to process (0 = all)"
+        required: false
+        default: "10"
+        type: string
+      max_per_celebrity:
+        description: "Maximum licensed portraits per celebrity"
+        required: false
+        default: "3"
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install importer dependencies
+        run: python -m pip install -r scripts/gallery/requirements.txt
+
+      - name: Import licensed gallery
+        env:
+          SUPABASE_URL: ${{ secrets.SHABAH_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SHABAH_SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          python scripts/gallery/import_commons.py \
+            --limit "${{ inputs.limit }}" \
+            --max-per-celebrity "${{ inputs.max_per_celebrity }}"
