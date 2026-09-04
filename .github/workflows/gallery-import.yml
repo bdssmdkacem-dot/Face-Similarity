@@ -1,12 +1,18 @@
 name: Gallery import
 
 on:
+  push:
+    branches: [feature/mvp-foundation]
+    paths:
+      - data/celebrity_names.txt
+      - scripts/gallery/**
+      - .github/workflows/gallery-import.yml
   workflow_dispatch:
     inputs:
       limit:
         description: "Number of catalog entries to process (0 = all)"
         required: false
-        default: "10"
+        default: "0"
         type: string
       max_per_celebrity:
         description: "Maximum licensed portraits per celebrity"
@@ -20,7 +26,7 @@ permissions:
 jobs:
   import:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 180
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -39,5 +45,5 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SHABAH_SUPABASE_SERVICE_ROLE_KEY }}
         run: |
           python scripts/gallery/import_commons.py \
-            --limit "${{ inputs.limit }}" \
-            --max-per-celebrity "${{ inputs.max_per_celebrity }}"
+            --limit "${{ inputs.limit || '0' }}" \
+            --max-per-celebrity "${{ inputs.max_per_celebrity || '3' }}"
