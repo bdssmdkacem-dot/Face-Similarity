@@ -193,7 +193,7 @@ def main() -> int:
         existing.raise_for_status()
         existing_sources = {row["source_url"] for row in existing.json()}
         inserted_embeddings = 0
-        for index, candidate in enumerate(candidates[: args.max_per_celeb]):
+        for index, candidate in enumerate(candidates[: args.max_per_celebrity]):
             if candidate["source_url"] in existing_sources:
                 continue
             image_path = cache / f"{slug}-{index}.jpg"
