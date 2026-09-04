@@ -1,5 +1,4 @@
 import 'dart:math' as math;
-import 'dart:ui' show Point;
 
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'package:image/image.dart' as img;
@@ -10,12 +9,12 @@ import 'package:image/image.dart' as img;
 class FaceAlignmentService {
   static const outputSize = 112;
 
-  static const _dst = <Point<double>>[
-    Point<double>(38.2946, 51.6963),
-    Point<double>(73.5318, 51.5014),
-    Point<double>(56.0252, 71.7366),
-    Point<double>(41.5493, 92.3655),
-    Point<double>(70.7299, 92.2041),
+  static const _dst = <math.Point<double>>[
+    math.Point<double>(38.2946, 51.6963),
+    math.Point<double>(73.5318, 51.5014),
+    math.Point<double>(56.0252, 71.7366),
+    math.Point<double>(41.5493, 92.3655),
+    math.Point<double>(70.7299, 92.2041),
   ];
 
   /// Aligns a decoded image using the same five-point similarity transform
@@ -23,7 +22,7 @@ class FaceAlignmentService {
   ///
   /// Returns null when one of the five required ML Kit landmarks is missing.
   img.Image? align(img.Image source, Face face) {
-    final landmarks = <Point<double>>[];
+    final landmarks = <math.Point<double>>[];
     const types = [
       FaceLandmarkType.leftEye,
       FaceLandmarkType.rightEye,
@@ -36,7 +35,7 @@ class FaceAlignmentService {
       final landmark = face.landmarks[type];
       if (landmark == null) return null;
       landmarks.add(
-        Point<double>(
+        math.Point<double>(
           landmark.position.x.toDouble(),
           landmark.position.y.toDouble(),
         ),
@@ -69,8 +68,8 @@ class FaceAlignmentService {
   }
 
   _Similarity? _estimateSimilarity(
-    List<Point<double>> src,
-    List<Point<double>> dst,
+    List<math.Point<double>> src,
+    List<math.Point<double>> dst,
   ) {
     if (src.length != 5 || dst.length != 5) return null;
 
