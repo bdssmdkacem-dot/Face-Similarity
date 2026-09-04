@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 
@@ -65,8 +67,10 @@ class _ScannerPageState extends State<ScannerPage> {
       _message = 'جاري تحليل الوجه…';
     });
 
+    String? capturedPath;
     try {
       final file = await controller.takePicture();
+      capturedPath = file.path;
       final validation = await _faceDetection.detectAndValidate(file.path);
 
       if (!validation.isValid || validation.face == null) {
@@ -101,22 +105,30 @@ class _ScannerPageState extends State<ScannerPage> {
         limit: 5,
       );
 
+      // Privacy rule: the captured selfie is temporary and is deleted before
+      // navigating to the results screen. Only the embedding is used remotely.
+      await File(file.path).delete().catchError((_) {});
+      capturedPath = null;
+
       if (!mounted) return;
-      Navigator.of(context).push(
+      await Navigator.of(context).push(
         MaterialPageRoute(
-          builder: (_) => ResultsPage(
-            imagePath: file.path,
-            matches: matches,
-          ),
+          builder: (_) => ResultsPage(matches: matches),
         ),
       );
-      setState(() => _busy = false);
+      if (mounted) setState(() => _busy = false);
     } catch (_) {
       if (mounted) {
         setState(() {
           _busy = false;
           _message = 'تعذر إكمال التحليل. تحقق من الاتصال ثم حاول مرة أخرى.';
         });
+      }
+    } finally {
+      if (capturedPath != null) {
+        try {
+          await File(capturedPath!).delete();
+        } catch (_) {}
       }
     }
   }
