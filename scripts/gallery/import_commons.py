@@ -15,12 +15,12 @@ import requests
 
 COMMONS_API = "https://commons.wikimedia.org/w/api.php"
 EMBED_URL = "https://huggingface.co/LibreYOLO/librefacerec-l/resolve/main/librefacerec-l.onnx?download=true"
-EMBED_SHA256 = "a7933ea5330113b01c9b60351d8f4c33003f145d847ac5f0e52ee2effe25c60"
+EMBED_SHA256 = "a7933ea5330113b01c9b60351d8f4c33003f145d8470ac5f0e52ee2effe25c60"
 DET_URL = "https://huggingface.co/LibreYOLO/librefacerec-det/resolve/main/librefacerec-det.onnx?download=true"
 DET_SHA256 = "8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4"
 
 DST = np.array([[38.2946, 51.6963], [73.5318, 51.5014], [56.0252, 71.7366], [41.5493, 92.3655], [70.7299, 92.2041]], dtype=np.float32)
-ALLOWED_LICENSE_PREFIXES = ("CC BY", "CC BY-SA", "CC0", "Public domain", "PDM")
+ALLOWED_LICENSES = {"CC BY", "CC BY-SA", "CC0", "Public domain", "PDM"}
 
 
 def sha256_file(path: Path) -> str:
@@ -39,7 +39,7 @@ def download_verified(url: str, path: Path, expected_sha256: str) -> None:
     tmp = path.with_suffix(path.suffix + ".tmp")
     for attempt in range(1, 4):
         try:
-            r = requests.get(url, timeout=180, stream=True, headers={"User-Agent": "ShabahGalleryImporter/1.1"})
+            r = requests.get(url, timeout=180, stream=True, headers={"User-Agent": "ShabahGalleryImporter/1.2"})
             r.raise_for_status()
             with tmp.open("wb") as f:
                 for chunk in r.iter_content(1024 * 1024):
@@ -62,7 +62,7 @@ def download_verified(url: str, path: Path, expected_sha256: str) -> None:
 
 def commons_candidates(name: str, limit: int = 12) -> list[dict]:
     params = {"action": "query", "format": "json", "generator": "search", "gsrsearch": f'File:"{name}"', "gsrnamespace": 6, "gsrlimit": limit, "prop": "imageinfo", "iiprop": "url|extmetadata", "iiurlwidth": 1200}
-    r = requests.get(COMMONS_API, params=params, timeout=30, headers={"User-Agent": "ShabahGalleryImporter/1.1"})
+    r = requests.get(COMMONS_API, params=params, timeout=30, headers={"User-Agent": "ShabahGalleryImporter/1.2"})
     r.raise_for_status()
     pages = r.json().get("query", {}).get("pages", {})
     out = []
@@ -70,7 +70,7 @@ def commons_candidates(name: str, limit: int = 12) -> list[dict]:
         info = (page.get("imageinfo") or [{}])[0]
         meta = info.get("extmetadata") or {}
         license_name = (meta.get("LicenseShortName", {}).get("value") or "").strip()
-        if not license_name or not license_name.startswith(ALLOWED_LICENSE_PREFIXES):
+        if license_name not in ALLOWED_LICENSES:
             continue
         image_url = info.get("thumburl") or info.get("url")
         if image_url:
@@ -184,7 +184,7 @@ def main() -> int:
                 continue
             image_path = cache / f"{slug}-{index}.jpg"
             try:
-                response = session.get(candidate["image_url"], timeout=60, headers={"User-Agent": "ShabahGalleryImporter/1.1"})
+                response = session.get(candidate["image_url"], timeout=60, headers={"User-Agent": "ShabahGalleryImporter/1.2"})
                 response.raise_for_status()
                 image_path.write_bytes(response.content)
                 result = embed_image(image_path, detector, embedder)
