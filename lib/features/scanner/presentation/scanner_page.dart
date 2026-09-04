@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:camera/camera.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/supabase_config.dart';
@@ -53,7 +54,9 @@ class _ScannerPageState extends State<ScannerPage> {
         return;
       }
       setState(() => _controller = controller);
-    } catch (_) {
+    } catch (error, stack) {
+      debugPrint('Shabah camera initialization failed: $error');
+      debugPrintStack(stackTrace: stack);
       if (mounted) setState(() => _message = 'تعذر تشغيل الكاميرا.');
     }
   }
@@ -61,9 +64,7 @@ class _ScannerPageState extends State<ScannerPage> {
   Future<void> _deleteCapturedFile(String path) async {
     try {
       final file = File(path);
-      if (await file.exists()) {
-        await file.delete();
-      }
+      if (await file.exists()) await file.delete();
     } catch (_) {
       // Best-effort cleanup; never block the user on local file deletion.
     }
@@ -108,38 +109,40 @@ class _ScannerPageState extends State<ScannerPage> {
       final embedding = await _embedding.embed(
         imagePath: file.path,
         face: validation.face!,
+        onStatus: (status) {
+          if (mounted) setState(() => _message = status);
+        },
       );
 
+      if (!mounted) return;
       setState(() => _message = 'جاري البحث عن أقرب المشاهير…');
       final matches = await CelebrityMatchRepository().matchEmbedding(
         embedding,
         limit: 5,
       );
 
-      // Privacy rule: the captured selfie is temporary and is deleted before
-      // navigating to the results screen. Only the embedding is used remotely.
       await _deleteCapturedFile(file.path);
       capturedPath = null;
 
       if (!mounted) return;
       await Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => ResultsPage(matches: matches),
-        ),
+        MaterialPageRoute(builder: (_) => ResultsPage(matches: matches)),
       );
       if (mounted) setState(() => _busy = false);
-    } catch (_) {
+    } catch (error, stack) {
+      debugPrint('Shabah scan failed: $error');
+      debugPrintStack(stackTrace: stack);
       if (mounted) {
         setState(() {
           _busy = false;
-          _message = 'تعذر إكمال التحليل. تحقق من الاتصال ثم حاول مرة أخرى.';
+          _message = error is TimeoutException
+              ? 'استغرق تحليل الوجه وقتًا أطول من المتوقع. حاول مرة أخرى.'
+              : 'تعذر إكمال التحليل. تحقق من الاتصال ثم حاول مرة أخرى.';
         });
       }
     } finally {
       final path = capturedPath;
-      if (path != null) {
-        await _deleteCapturedFile(path);
-      }
+      if (path != null) await _deleteCapturedFile(path);
     }
   }
 
