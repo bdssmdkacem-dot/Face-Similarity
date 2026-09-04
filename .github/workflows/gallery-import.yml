@@ -12,12 +12,12 @@ on:
       limit:
         description: "Number of catalog entries to process (0 = all)"
         required: false
-        default: "0"
+        default: "1000"
         type: string
       max_per_celebrity:
         description: "Maximum licensed portraits per celebrity"
         required: false
-        default: "3"
+        default: "1"
         type: string
 
 permissions:
@@ -26,7 +26,7 @@ permissions:
 jobs:
   import:
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    timeout-minutes: 240
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -39,11 +39,15 @@ jobs:
       - name: Install importer dependencies
         run: python -m pip install -r scripts/gallery/requirements.txt
 
+      - name: Build 1000-person celebrity catalog
+        run: python scripts/gallery/build_catalog.py
+
       - name: Import licensed gallery
         env:
           SUPABASE_URL: ${{ secrets.SHABAH_SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SHABAH_SUPABASE_SERVICE_ROLE_KEY }}
         run: |
           python scripts/gallery/import_commons.py \
-            --limit "${{ inputs.limit || '0' }}" \
-            --max-per-celebrity "${{ inputs.max_per_celebrity || '3' }}"
+            --names data/celebrity_names.generated.txt \
+            --limit "${{ inputs.limit || '1000' }}" \
+            --max-per-celebrity "${{ inputs.max_per_celebrity || '1' }}"
