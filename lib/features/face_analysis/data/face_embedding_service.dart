@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:math' as math;
+import 'dart:typed_data';
 import 'dart:ui' show Rect;
 
 import 'package:crypto/crypto.dart';
@@ -9,16 +10,12 @@ import 'package:image/image.dart' as img;
 import 'package:path_provider/path_provider.dart';
 
 /// On-device face embedding using LibreFaceRec / AuraFace-v1.
-///
-/// The model accepts a 112x112 RGB face crop and returns a 512-dim
-/// L2-normalized embedding. The model is downloaded once and cached locally;
-/// the selfie itself never leaves the device in this service.
 class FaceEmbeddingService {
   static const _modelFileName = 'librefacerec-l.onnx';
   static const _modelUrl =
       'https://huggingface.co/LibreYOLO/librefacerec-l/resolve/main/librefacerec-l.onnx';
   static const _expectedSha256 =
-      'a7933ea5330113b01c9b60351d8f4c33003f145d847ac5f0e52ee2effe25c60';
+      'a7933ea5330113b01c9b60351d8f4c33003f145d8470ac5f0e52ee2effe25c60';
 
   OnnxRuntime? _runtime;
   OrtSession? _session;
@@ -30,23 +27,24 @@ class FaceEmbeddingService {
     final session = await _getSession();
     final imageBytes = await File(imagePath).readAsBytes();
     final source = img.decodeImage(imageBytes);
-    if (source == null) {
-      throw StateError('تعذر قراءة الصورة.');
-    }
+    if (source == null) throw StateError('تعذر قراءة الصورة.');
 
     final crop = _cropFace(source, face.boundingBox);
     final input = _toModelTensor(crop);
     final inputName = session.inputNames.first;
     final outputName = session.outputNames.first;
 
-    final inputTensor = await OrtValue.fromList(input, [1, 3, 112, 112]);
+    // The face model expects FLOAT32 NCHW. Using Float32List prevents the
+    // ONNX Runtime Android backend from receiving a FLOAT64 tensor.
+    final inputTensor = await OrtValue.fromList(
+      Float32List.fromList(input),
+      [1, 3, 112, 112],
+    );
     Map<String, OrtValue>? outputs;
     try {
       outputs = await session.run({inputName: inputTensor});
       final output = outputs[outputName];
-      if (output == null) {
-        throw StateError('نموذج الوجه لم يُرجع embedding.');
-      }
+      if (output == null) throw StateError('نموذج الوجه لم يُرجع embedding.');
 
       final values = (await output.asFlattenedList())
           .map((value) => (value as num).toDouble())
@@ -69,7 +67,6 @@ class FaceEmbeddingService {
 
   Future<OrtSession> _getSession() async {
     if (_session != null) return _session!;
-
     final modelFile = await _ensureModelFile();
     _runtime = OnnxRuntime();
     _session = await _runtime!.createSession(modelFile.path);
@@ -89,6 +86,7 @@ class FaceEmbeddingService {
     final client = HttpClient();
     try {
       final request = await client.getUrl(Uri.parse(_modelUrl));
+      request.headers.set(HttpHeaders.userAgentHeader, 'Shabah/0.1 Android');
       final response = await request.close();
       if (response.statusCode != HttpStatus.ok) {
         throw HttpException(
@@ -142,7 +140,6 @@ class FaceEmbeddingService {
 
   List<double> _toModelTensor(img.Image image) {
     final values = <double>[];
-    // NCHW, RGB. ArcFace convention: normalize pixels to [-1, 1].
     for (var channel = 0; channel < 3; channel++) {
       for (var y = 0; y < 112; y++) {
         for (var x = 0; x < 112; x++) {
