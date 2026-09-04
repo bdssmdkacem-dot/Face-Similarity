@@ -40,8 +40,9 @@ class FaceEmbeddingService {
     final outputName = session.outputNames.first;
 
     final inputTensor = await OrtValue.fromList(input, [1, 3, 112, 112]);
+    Map<String, OrtValue>? outputs;
     try {
-      final outputs = await session.run({inputName: inputTensor});
+      outputs = await session.run({inputName: inputTensor});
       final output = outputs[outputName];
       if (output == null) {
         throw StateError('نموذج الوجه لم يُرجع embedding.');
@@ -58,6 +59,11 @@ class FaceEmbeddingService {
       return _l2Normalize(values);
     } finally {
       await inputTensor.dispose();
+      if (outputs != null) {
+        for (final output in outputs!.values) {
+          await output.dispose();
+        }
+      }
     }
   }
 
@@ -115,7 +121,7 @@ class FaceEmbeddingService {
     final bottom = box.bottom.ceil().clamp(top + 1, source.height);
     final width = right - left;
     final height = bottom - top;
-    final size = math.max(width, height);
+    final size = width > height ? width : height;
     final cx = left + width / 2;
     final cy = top + height / 2;
 
