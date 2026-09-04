@@ -1,0 +1,32 @@
+# Initial V1 catalog. Add one public figure per line.
+# Gallery ingestion resolves licensed images from Wikimedia Commons.
+Dwayne Johnson
+Leonardo DiCaprio
+Brad Pitt
+Tom Cruise
+Keanu Reeves
+Will Smith
+Robert Downey Jr.
+Chris Hemsworth
+Ryan Reynolds
+Johnny Depp
+Hugh Jackman
+Pedro Pascal
+Henry Cavill
+Chris Evans
+Ryan Gosling
+Margot Robbie
+Emma Stone
+Scarlett Johansson
+Anne Hathaway
+Jennifer Lawrence
+Angelina Jolie
+Natalie Portman
+Gal Gadot
+Zendaya
+Taylor Swift
+Beyonce
+Adele
+Rihanna
+Cristiano Ronaldo
+Lionel Messi
