@@ -39,7 +39,7 @@ def download_verified(url: str, path: Path, expected_sha256: str) -> None:
     tmp = path.with_suffix(path.suffix + ".tmp")
     for attempt in range(1, 4):
         try:
-            r = requests.get(url, timeout=180, stream=True, headers={"User-Agent": "ShabahGalleryImporter/1.2"})
+            r = requests.get(url, timeout=180, stream=True, headers={"User-Agent": "ShabahGalleryImporter/1.3"})
             r.raise_for_status()
             with tmp.open("wb") as f:
                 for chunk in r.iter_content(1024 * 1024):
@@ -62,7 +62,7 @@ def download_verified(url: str, path: Path, expected_sha256: str) -> None:
 
 def commons_candidates(name: str, limit: int = 12) -> list[dict]:
     params = {"action": "query", "format": "json", "generator": "search", "gsrsearch": f'File:"{name}"', "gsrnamespace": 6, "gsrlimit": limit, "prop": "imageinfo", "iiprop": "url|extmetadata", "iiurlwidth": 1200}
-    r = requests.get(COMMONS_API, params=params, timeout=30, headers={"User-Agent": "ShabahGalleryImporter/1.2"})
+    r = requests.get(COMMONS_API, params=params, timeout=30, headers={"User-Agent": "ShabahGalleryImporter/1.3"})
     r.raise_for_status()
     pages = r.json().get("query", {}).get("pages", {})
     out = []
@@ -83,7 +83,20 @@ def slugify(name: str) -> str:
 
 
 def rest_headers(key: str) -> dict[str, str]:
-    return {"apikey": key, "Authorization": f"Bearer {key}", "Content-Type": "application/json", "Prefer": "return=representation"}
+    # New Supabase sb_secret_* keys are opaque API keys, not JWTs.
+    # Sending them as Authorization: Bearer makes PostgREST treat them as a user token
+    # and can cause RLS errors. The apikey header is the correct server-side path.
+    return {"apikey": key, "Content-Type": "application/json", "Prefer": "return=representation"}
+
+
+def verify_admin_key(base: str, key: str) -> None:
+    r = requests.get(f"{base}/rest/v1/", headers={"apikey": key}, timeout=30)
+    if r.status_code >= 300:
+        raise RuntimeError(
+            f"Supabase admin key verification failed ({r.status_code}). "
+            "Ensure SHABAH_SUPABASE_SERVICE_ROLE_KEY contains the Face-Similarity sb_secret_* key. "
+            f"Response: {r.text[:500]}"
+        )
 
 
 def get_existing_celebrity(base: str, key: str, slug: str) -> dict | None:
@@ -150,7 +163,8 @@ def main() -> int:
     base = os.environ.get("SUPABASE_URL", "").rstrip("/")
     key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
     if not base or not key:
-        raise SystemExit("Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in the environment; never commit the service-role key.")
+        raise SystemExit("Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in the environment; never commit the secret key.")
+    verify_admin_key(base, key)
     cache = Path(args.cache)
     cache.mkdir(parents=True, exist_ok=True)
     embed_model = cache / "librefacerec-l.onnx"
@@ -179,12 +193,12 @@ def main() -> int:
         existing.raise_for_status()
         existing_sources = {row["source_url"] for row in existing.json()}
         inserted_embeddings = 0
-        for index, candidate in enumerate(candidates[: args.max_per_celebrity]):
+        for index, candidate in enumerate(candidates[: args.max_per_celeb]):
             if candidate["source_url"] in existing_sources:
                 continue
             image_path = cache / f"{slug}-{index}.jpg"
             try:
-                response = session.get(candidate["image_url"], timeout=60, headers={"User-Agent": "ShabahGalleryImporter/1.2"})
+                response = session.get(candidate["image_url"], timeout=60, headers={"User-Agent": "ShabahGalleryImporter/1.3"})
                 response.raise_for_status()
                 image_path.write_bytes(response.content)
                 result = embed_image(image_path, detector, embedder)
