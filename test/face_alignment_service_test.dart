@@ -1,4 +1,5 @@
-import 'dart:ui' show Point, Rect;
+import 'dart:math' as math;
+import 'dart:ui' show Rect;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
@@ -11,23 +12,23 @@ void main() {
     final landmarks = <FaceLandmarkType, FaceLandmark?>{
       FaceLandmarkType.leftEye: FaceLandmark(
         type: FaceLandmarkType.leftEye,
-        position: const Point<int>(38, 52),
+        position: const math.Point<int>(38, 52),
       ),
       FaceLandmarkType.rightEye: FaceLandmark(
         type: FaceLandmarkType.rightEye,
-        position: const Point<int>(74, 52),
+        position: const math.Point<int>(74, 52),
       ),
       FaceLandmarkType.noseBase: FaceLandmark(
         type: FaceLandmarkType.noseBase,
-        position: const Point<int>(56, 72),
+        position: const math.Point<int>(56, 72),
       ),
       FaceLandmarkType.leftMouth: FaceLandmark(
         type: FaceLandmarkType.leftMouth,
-        position: const Point<int>(42, 92),
+        position: const math.Point<int>(42, 92),
       ),
       FaceLandmarkType.rightMouth: FaceLandmark(
         type: FaceLandmarkType.rightMouth,
-        position: const Point<int>(71, 92),
+        position: const math.Point<int>(71, 92),
       ),
     };
 
