@@ -60,7 +60,7 @@ class FaceEmbeddingService {
     } finally {
       await inputTensor.dispose();
       if (outputs != null) {
-        for (final output in outputs!.values) {
+        for (final output in outputs.values) {
           await output.dispose();
         }
       }
