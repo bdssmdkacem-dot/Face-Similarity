@@ -1,0 +1,66 @@
+name: Android validation
+
+on:
+  push:
+    branches:
+      - feature/mvp-foundation
+  pull_request:
+    branches:
+      - feature/mvp-foundation
+
+permissions:
+  contents: write
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Bootstrap Android platform
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ ! -d android ]; then
+            flutter create --platforms=android --org com.shabah .
+          fi
+
+          mkdir -p android/app
+          cat > android/app/proguard-rules.pro <<'EOF'
+          -keep class ai.onnxruntime.** { *; }
+          EOF
+
+          manifest="android/app/src/main/AndroidManifest.xml"
+          if ! grep -q 'android.permission.INTERNET' "$manifest"; then
+            sed -i '/<manifest /a\    <uses-permission android:name="android.permission.INTERNET" />' "$manifest"
+          fi
+
+      - name: Persist generated Android platform
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add android .gitignore .metadata
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: bootstrap Android platform"
+            git push origin HEAD:${GITHUB_REF_NAME}
+          fi
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Build debug APK
+        run: flutter build apk --debug
