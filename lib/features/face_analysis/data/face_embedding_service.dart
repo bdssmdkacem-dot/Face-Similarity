@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
@@ -29,9 +30,7 @@ class FaceEmbeddingService {
     onStatus?.call('جاري تهيئة محرك الذكاء الاصطناعي…');
     final session = await _getSession(onStatus: onStatus).timeout(
       const Duration(seconds: 120),
-      onTimeout: () => throw TimeoutException(
-        'تهيئة نموذج الوجه تجاوزت المهلة.',
-      ),
+      onTimeout: () => throw TimeoutException('تهيئة نموذج الوجه تجاوزت المهلة.'),
     );
 
     onStatus?.call('جاري تجهيز صورة الوجه…');
@@ -54,9 +53,7 @@ class FaceEmbeddingService {
       final stopwatch = Stopwatch()..start();
       outputs = await session.run({inputName: inputTensor}).timeout(
         const Duration(seconds: 60),
-        onTimeout: () => throw TimeoutException(
-          'استدلال نموذج الوجه تجاوز 60 ثانية.',
-        ),
+        onTimeout: () => throw TimeoutException('استدلال نموذج الوجه تجاوز 60 ثانية.'),
       );
       stopwatch.stop();
       debugPrint('Shabah ONNX inference: ${stopwatch.elapsedMilliseconds} ms');
@@ -68,9 +65,7 @@ class FaceEmbeddingService {
           .map((value) => (value as num).toDouble())
           .toList(growable: false);
       if (values.length != 512) {
-        throw StateError(
-          'Embedding dimension mismatch: expected 512, got ${values.length}.',
-        );
+        throw StateError('Embedding dimension mismatch: expected 512, got ${values.length}.');
       }
       onStatus?.call('تم إنشاء بصمة الوجه.');
       return _l2Normalize(values);
@@ -94,9 +89,7 @@ class FaceEmbeddingService {
     _runtime = OnnxRuntime();
     final session = await _runtime!.createSession(modelFile.path).timeout(
       const Duration(seconds: 90),
-      onTimeout: () => throw TimeoutException(
-        'تحميل نموذج الوجه داخل ONNX Runtime تجاوز 90 ثانية.',
-      ),
+      onTimeout: () => throw TimeoutException('تحميل نموذج الوجه داخل ONNX Runtime تجاوز 90 ثانية.'),
     );
     _session = session;
     return session;
@@ -116,17 +109,11 @@ class FaceEmbeddingService {
     onStatus?.call('جاري تنزيل نموذج الوجه لأول مرة…');
     final client = HttpClient();
     try {
-      final request = await client.getUrl(Uri.parse(_modelUrl)).timeout(
-        const Duration(seconds: 30),
-      );
+      final request = await client.getUrl(Uri.parse(_modelUrl)).timeout(const Duration(seconds: 30));
       request.headers.set(HttpHeaders.userAgentHeader, 'Shabah/0.1 Android');
-      final response = await request.close().timeout(
-        const Duration(seconds: 60),
-      );
+      final response = await request.close().timeout(const Duration(seconds: 60));
       if (response.statusCode != HttpStatus.ok) {
-        throw HttpException(
-          'Model download failed with HTTP ${response.statusCode}.',
-        );
+        throw HttpException('Model download failed with HTTP ${response.statusCode}.');
       }
 
       final total = response.contentLength;
@@ -138,9 +125,7 @@ class FaceEmbeddingService {
           received += chunk.length;
           if (total > 0) {
             final percent = (received * 100 / total).clamp(0, 100).round();
-            if (percent % 10 == 0) {
-              onStatus?.call('جاري تنزيل نموذج الوجه… $percent%');
-            }
+            if (percent % 10 == 0) onStatus?.call('جاري تنزيل نموذج الوجه… $percent%');
           }
         }
       } finally {
@@ -169,19 +154,11 @@ class FaceEmbeddingService {
     final size = width > height ? width : height;
     final cx = left + width / 2;
     final cy = top + height / 2;
-
     final cropLeft = (cx - size / 2).round().clamp(0, source.width - 1);
     final cropTop = (cy - size / 2).round().clamp(0, source.height - 1);
     final cropRight = (cropLeft + size).clamp(cropLeft + 1, source.width);
     final cropBottom = (cropTop + size).clamp(cropTop + 1, source.height);
-
-    final square = img.copyCrop(
-      source,
-      x: cropLeft,
-      y: cropTop,
-      width: cropRight - cropLeft,
-      height: cropBottom - cropTop,
-    );
+    final square = img.copyCrop(source, x: cropLeft, y: cropTop, width: cropRight - cropLeft, height: cropBottom - cropTop);
     return img.copyResize(square, width: 112, height: 112);
   }
 
@@ -191,11 +168,7 @@ class FaceEmbeddingService {
       for (var y = 0; y < 112; y++) {
         for (var x = 0; x < 112; x++) {
           final pixel = image.getPixel(x, y);
-          final value = switch (channel) {
-            0 => pixel.r,
-            1 => pixel.g,
-            _ => pixel.b,
-          };
+          final value = switch (channel) { 0 => pixel.r, 1 => pixel.g, _ => pixel.b };
           values.add((value.toDouble() - 127.5) / 127.5);
         }
       }
@@ -204,9 +177,7 @@ class FaceEmbeddingService {
   }
 
   List<double> _l2Normalize(List<double> vector) {
-    final norm = math.sqrt(
-      vector.fold<double>(0, (sum, value) => sum + value * value),
-    );
+    final norm = math.sqrt(vector.fold<double>(0, (sum, value) => sum + value * value));
     if (norm == 0) throw StateError('Embedding norm is zero.');
     return vector.map((value) => value / norm).toList(growable: false);
   }
