@@ -110,7 +110,6 @@ class FaceEmbeddingService {
       return session;
     } catch (_) {
       _runtime = null;
-      await runtime.close();
       rethrow;
     }
   }
@@ -275,8 +274,6 @@ class FaceEmbeddingService {
     final session = _session;
     _session = null;
     if (session != null) await session.close();
-    final runtime = _runtime;
     _runtime = null;
-    if (runtime != null) await runtime.close();
   }
 }
