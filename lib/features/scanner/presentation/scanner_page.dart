@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:camera/camera.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 
@@ -23,14 +25,12 @@ class _ScannerPageState extends State<ScannerPage>
   final _faceDetection = FaceDetectionService();
   final _embedding = FaceEmbeddingService();
   CameraController? _controller;
-  StreamSubscription? _frameSubscription;
   late final AnimationController _scanAnimation;
 
   bool _busy = false;
   bool _processingFrame = false;
   bool _autoScanStarted = false;
   int _stableFrames = 0;
-  DateTime? _lastFaceAt;
   Face? _realtimeFace;
   String _message = 'وجّه وجهك داخل الإطار';
   double _progress = 0;
@@ -90,14 +90,15 @@ class _ScannerPageState extends State<ScannerPage>
 
       if (faces.length != 1) {
         _stableFrames = 0;
-        _lastFaceAt = null;
-        setState(() {
-          _realtimeFace = null;
-          _progress = 0;
-          _message = faces.isEmpty
-              ? 'وجّه وجهك داخل الإطار'
-              : 'يجب أن يظهر وجه واحد فقط';
-        });
+        if (mounted) {
+          setState(() {
+            _realtimeFace = null;
+            _progress = 0;
+            _message = faces.isEmpty
+                ? 'وجّه وجهك داخل الإطار'
+                : 'يجب أن يظهر وجه واحد فقط';
+          });
+        }
         return;
       }
 
@@ -106,25 +107,27 @@ class _ScannerPageState extends State<ScannerPage>
       final pitch = face.headEulerAngleX?.abs() ?? 0;
       if (yaw > 25 || pitch > 25) {
         _stableFrames = 0;
-        _lastFaceAt = null;
-        setState(() {
-          _realtimeFace = face;
-          _progress = 0;
-          _message = 'وجّه وجهك نحو الكاميرا مباشرة';
-        });
+        if (mounted) {
+          setState(() {
+            _realtimeFace = face;
+            _progress = 0;
+            _message = 'وجّه وجهك نحو الكاميرا مباشرة';
+          });
+        }
         return;
       }
 
       _stableFrames++;
-      _lastFaceAt = DateTime.now();
       final progress = (_stableFrames / 8).clamp(0.0, 1.0);
-      setState(() {
-        _realtimeFace = face;
-        _progress = progress;
-        _message = progress >= 1
-            ? '✓ تم تثبيت الوجه — جاري المسح…'
-            : 'ثبّت وجهك… ${(progress * 100).round()}%';
-      });
+      if (mounted) {
+        setState(() {
+          _realtimeFace = face;
+          _progress = progress;
+          _message = progress >= 1
+              ? '✓ تم تثبيت الوجه — جاري المسح…'
+              : 'ثبّت وجهك… ${(progress * 100).round()}%';
+        });
+      }
 
       if (_stableFrames >= 8 && !_autoScanStarted) {
         _autoScanStarted = true;
@@ -142,10 +145,8 @@ class _ScannerPageState extends State<ScannerPage>
     final controller = _controller;
     if (controller == null) return null;
 
-    final camera = controller.description;
-    final sensorOrientation = camera.sensorOrientation;
     InputImageRotation? rotation;
-    switch (sensorOrientation) {
+    switch (controller.description.sensorOrientation) {
       case 0:
         rotation = InputImageRotation.rotation0deg;
       case 90:
@@ -158,8 +159,7 @@ class _ScannerPageState extends State<ScannerPage>
     if (rotation == null) return null;
 
     final format = InputImageFormatValue.fromRawValue(image.format.raw);
-    if (format == null) return null;
-    if (image.planes.length != 3) return null;
+    if (format == null || image.planes.length != 3) return null;
 
     final bytes = WriteBuffer();
     for (final plane in image.planes) {
@@ -260,6 +260,7 @@ class _ScannerPageState extends State<ScannerPage>
           _autoScanStarted = false;
           _stableFrames = 0;
           _progress = 0;
+          _realtimeFace = null;
           _message = 'وجّه وجهك داخل الإطار';
         });
         await controller.startImageStream(_processCameraImage);
@@ -292,7 +293,6 @@ class _ScannerPageState extends State<ScannerPage>
   @override
   void dispose() {
     _scanAnimation.dispose();
-    _frameSubscription?.cancel();
     _controller?.dispose();
     _faceDetection.dispose();
     _embedding.dispose();
@@ -333,7 +333,9 @@ class _ScannerPageState extends State<ScannerPage>
                           const SizedBox(height: 10),
                           ClipRRect(
                             borderRadius: BorderRadius.circular(8),
-                            child: LinearProgressIndicator(value: _busy ? null : _progress),
+                            child: LinearProgressIndicator(
+                              value: _busy ? null : _progress,
+                            ),
                           ),
                           const SizedBox(height: 8),
                           Text(
@@ -370,11 +372,11 @@ class _ScanOverlay extends StatelessWidget {
       child: AnimatedBuilder(
         animation: animation,
         builder: (context, child) {
-          final top = 0.27 + animation.value * 0.40;
+          final scanFraction = 0.27 + animation.value * 0.40;
           return CustomPaint(
             painter: _ScanPainter(
               progress: progress,
-              scanFraction: top,
+              scanFraction: scanFraction,
               hasFace: hasFace,
             ),
           );
