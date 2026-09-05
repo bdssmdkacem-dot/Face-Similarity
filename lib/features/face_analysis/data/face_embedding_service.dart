@@ -77,7 +77,8 @@ class FaceEmbeddingService {
   }
 
   Future<OrtSession> _getSession({void Function(String status)? onStatus}) async {
-    if (_session != null) return _session!;
+    final existing = _session;
+    if (existing != null) return existing;
     final pending = _sessionFuture;
     if (pending != null) return pending;
 
