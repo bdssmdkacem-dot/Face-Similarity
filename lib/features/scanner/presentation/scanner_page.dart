@@ -162,7 +162,11 @@ class _ScannerPageState extends State<ScannerPage>
 
       if (_stableFrames >= 8 && !_autoScanStarted && _aiReady) {
         _autoScanStarted = true;
-        await _scan();
+        // Do not await _scan() from inside the camera image callback.
+        // stopImageStream() can wait for the active callback to finish,
+        // which would deadlock here and leave the UI on the stable-face
+        // message forever. Schedule the scan after this callback returns.
+        unawaited(Future<void>.delayed(Duration.zero, _scan));
       }
     } catch (error, stack) {
       debugPrint('Shabah realtime face detection failed: $error');
