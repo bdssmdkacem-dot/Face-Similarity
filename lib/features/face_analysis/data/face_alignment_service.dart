@@ -51,10 +51,10 @@ class FaceAlignmentService {
         // Invert the forward similarity transform: destination -> source.
         final dx = x.toDouble() - transform.tx;
         final dy = y.toDouble() - transform.ty;
-        final sourceX = (transform.cos * dx + transform.sin * dy) /
-            transform.scale;
-        final sourceY = (-transform.sin * dx + transform.cos * dy) /
-            transform.scale;
+        final sourceX =
+            (transform.cos * dx + transform.sin * dy) / transform.scale;
+        final sourceY =
+            (-transform.sin * dx + transform.cos * dy) / transform.scale;
 
         final pixel = source.getPixelInterpolate(
           sourceX,

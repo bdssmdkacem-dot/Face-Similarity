@@ -37,7 +37,8 @@ class FaceEmbeddingService {
     onStatus?.call('جاري تهيئة محرك الذكاء الاصطناعي…');
     final session = await _getSession(onStatus: onStatus).timeout(
       const Duration(seconds: 150),
-      onTimeout: () => throw TimeoutException('تهيئة نموذج الوجه تجاوزت المهلة.'),
+      onTimeout:
+          () => throw TimeoutException('تهيئة نموذج الوجه تجاوزت المهلة.'),
     );
     onStatus?.call('جاري تجهيز صورة الوجه…');
     final source = img.decodeImage(await File(imagePath).readAsBytes());
@@ -55,17 +56,25 @@ class FaceEmbeddingService {
     Map<String, OrtValue>? outputs;
     try {
       onStatus?.call('جاري تشغيل نموذج الوجه…');
-      outputs = await session.run({inputName: inputTensor}).timeout(
-        const Duration(seconds: 60),
-        onTimeout: () => throw TimeoutException('استدلال نموذج الوجه تجاوز 60 ثانية.'),
-      );
+      outputs = await session
+          .run({inputName: inputTensor})
+          .timeout(
+            const Duration(seconds: 60),
+            onTimeout:
+                () =>
+                    throw TimeoutException(
+                      'استدلال نموذج الوجه تجاوز 60 ثانية.',
+                    ),
+          );
       final output = outputs[outputName];
       if (output == null) throw StateError('نموذج الوجه لم يُرجع embedding.');
       final values = (await output.asFlattenedList())
           .map((value) => (value as num).toDouble())
           .toList(growable: false);
       if (values.length != 512) {
-        throw StateError('Embedding dimension mismatch: expected 512, got ${values.length}.');
+        throw StateError(
+          'Embedding dimension mismatch: expected 512, got ${values.length}.',
+        );
       }
       onStatus?.call('تم إنشاء بصمة الوجه.');
       return _l2Normalize(values);
@@ -77,7 +86,9 @@ class FaceEmbeddingService {
     }
   }
 
-  Future<OrtSession> _getSession({void Function(String status)? onStatus}) async {
+  Future<OrtSession> _getSession({
+    void Function(String status)? onStatus,
+  }) async {
     final existing = _session;
     if (existing != null) return existing;
     final pending = _sessionFuture;
@@ -98,30 +109,44 @@ class FaceEmbeddingService {
     }
   }
 
-  Future<OrtSession> _createSession({void Function(String status)? onStatus}) async {
+  Future<OrtSession> _createSession({
+    void Function(String status)? onStatus,
+  }) async {
     final runtime = OnnxRuntime();
     try {
       onStatus?.call('جاري تحميل نموذج الوجه المضمن داخل التطبيق…');
-      return await runtime.createSessionFromAsset(_modelAsset).timeout(
-        const Duration(seconds: 90),
-        onTimeout: () => throw TimeoutException(
-          'تحميل نموذج الوجه داخل ONNX Runtime تجاوز 90 ثانية.',
-        ),
-      );
+      return await runtime
+          .createSessionFromAsset(_modelAsset)
+          .timeout(
+            const Duration(seconds: 90),
+            onTimeout:
+                () =>
+                    throw TimeoutException(
+                      'تحميل نموذج الوجه داخل ONNX Runtime تجاوز 90 ثانية.',
+                    ),
+          );
     } catch (assetError) {
-      debugPrint('Bundled face model unavailable, using network fallback: $assetError');
+      debugPrint(
+        'Bundled face model unavailable, using network fallback: $assetError',
+      );
       onStatus?.call('النموذج المضمن غير متوفر — جاري تنزيله لأول مرة…');
       final modelFile = await _ensureModelFile(onStatus: onStatus);
-      return runtime.createSession(modelFile.path).timeout(
-        const Duration(seconds: 90),
-        onTimeout: () => throw TimeoutException(
-          'تحميل نموذج الوجه داخل ONNX Runtime تجاوز 90 ثانية.',
-        ),
-      );
+      return runtime
+          .createSession(modelFile.path)
+          .timeout(
+            const Duration(seconds: 90),
+            onTimeout:
+                () =>
+                    throw TimeoutException(
+                      'تحميل نموذج الوجه داخل ONNX Runtime تجاوز 90 ثانية.',
+                    ),
+          );
     }
   }
 
-  Future<File> _ensureModelFile({void Function(String status)? onStatus}) async {
+  Future<File> _ensureModelFile({
+    void Function(String status)? onStatus,
+  }) async {
     final directory = await getApplicationSupportDirectory();
     final file = File('${directory.path}/$_modelFileName');
     if (await file.exists()) {
@@ -133,15 +158,22 @@ class FaceEmbeddingService {
     onStatus?.call('جاري تنزيل نموذج الوجه لأول مرة…');
     final client = HttpClient();
     try {
-      final request = await client.getUrl(Uri.parse(_modelUrl)).timeout(const Duration(seconds: 30));
+      final request = await client
+          .getUrl(Uri.parse(_modelUrl))
+          .timeout(const Duration(seconds: 30));
       request.headers.set(HttpHeaders.userAgentHeader, 'Shabah/0.1 Android');
-      final response = await request.close().timeout(const Duration(seconds: 60));
+      final response = await request.close().timeout(
+        const Duration(seconds: 60),
+      );
       if (response.statusCode != HttpStatus.ok) {
-        throw HttpException('Model download failed with HTTP ${response.statusCode}.');
+        throw HttpException(
+          'Model download failed with HTTP ${response.statusCode}.',
+        );
       }
       await _downloadResponse(response, file, onStatus: onStatus).timeout(
         const Duration(minutes: 5),
-        onTimeout: () => throw TimeoutException('تنزيل نموذج الوجه تجاوز 5 دقائق.'),
+        onTimeout:
+            () => throw TimeoutException('تنزيل نموذج الوجه تجاوز 5 دقائق.'),
       );
       onStatus?.call('جاري التحقق من نموذج الوجه…');
       final digest = await sha256.bind(file.openRead()).first;
@@ -187,9 +219,10 @@ class FaceEmbeddingService {
       for (var y = 0; y < 112; y++) {
         for (var x = 0; x < 112; x++) {
           final pixel = image.getPixel(x, y);
-          final value = channel == 0
-              ? pixel.r
-              : channel == 1
+          final value =
+              channel == 0
+                  ? pixel.r
+                  : channel == 1
                   ? pixel.g
                   : pixel.b;
           values.add((value.toDouble() - 127.5) / 127.5);

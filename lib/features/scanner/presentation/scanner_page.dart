@@ -130,9 +130,10 @@ class _ScannerPageState extends State<ScannerPage>
         setState(() {
           _realtimeFace = null;
           _progress = 0;
-          _message = faces.isEmpty
-              ? 'وجّه وجهك داخل الإطار'
-              : 'يجب أن يظهر وجه واحد فقط';
+          _message =
+              faces.isEmpty
+                  ? 'وجّه وجهك داخل الإطار'
+                  : 'يجب أن يظهر وجه واحد فقط';
         });
         return;
       }
@@ -155,9 +156,10 @@ class _ScannerPageState extends State<ScannerPage>
       setState(() {
         _realtimeFace = face;
         _progress = progress;
-        _message = progress >= 1
-            ? '✓ تم تثبيت الوجه — جاري المسح…'
-            : 'ثبّت وجهك… ${(progress * 100).round()}%';
+        _message =
+            progress >= 1
+                ? '✓ تم تثبيت الوجه — جاري المسح…'
+                : 'ثبّت وجهك… ${(progress * 100).round()}%';
       });
 
       if (_stableFrames >= 8 && !_autoScanStarted && _aiReady) {
@@ -283,10 +285,9 @@ class _ScannerPageState extends State<ScannerPage>
       capturedPath = null;
       await Navigator.of(context).push(
         MaterialPageRoute(
-          builder: (_) => ResultsPage(
-            matches: matches,
-            userImagePath: resultImagePath,
-          ),
+          builder:
+              (_) =>
+                  ResultsPage(matches: matches, userImagePath: resultImagePath),
         ),
       );
       if (mounted) {
@@ -309,9 +310,10 @@ class _ScannerPageState extends State<ScannerPage>
           _autoScanStarted = false;
           _stableFrames = 0;
           _progress = 0;
-          _message = error is TimeoutException
-              ? 'استغرق تحليل الوجه وقتًا أطول من المتوقع. حاول مرة أخرى.'
-              : 'تعذر إكمال التحليل. تحقق من الاتصال ثم حاول مرة أخرى.';
+          _message =
+              error is TimeoutException
+                  ? 'استغرق تحليل الوجه وقتًا أطول من المتوقع. حاول مرة أخرى.'
+                  : 'تعذر إكمال التحليل. تحقق من الاتصال ثم حاول مرة أخرى.';
         });
         try {
           if (!controller.value.isStreamingImages) {
@@ -339,68 +341,71 @@ class _ScannerPageState extends State<ScannerPage>
     final controller = _controller;
     return Scaffold(
       appBar: AppBar(title: const Text('مسح الوجه')),
-      body: controller == null
-          ? Center(child: Text(_message))
-          : Stack(
-              fit: StackFit.expand,
-              children: [
-                CameraPreview(controller),
-                _ScanOverlay(
-                  progress: _progress,
-                  animation: _scanAnimation,
-                  hasFace: _realtimeFace != null,
-                ),
-                Positioned(
-                  left: 20,
-                  right: 20,
-                  bottom: 28,
-                  child: Card(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            _message,
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(fontWeight: FontWeight.w600),
-                          ),
-                          if (_aiMessage != null && !_aiReady) ...[
-                            const SizedBox(height: 6),
+      body:
+          controller == null
+              ? Center(child: Text(_message))
+              : Stack(
+                fit: StackFit.expand,
+                children: [
+                  CameraPreview(controller),
+                  _ScanOverlay(
+                    progress: _progress,
+                    animation: _scanAnimation,
+                    hasFace: _realtimeFace != null,
+                  ),
+                  Positioned(
+                    left: 20,
+                    right: 20,
+                    bottom: 28,
+                    child: Card(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
                             Text(
-                              _aiMessage!,
+                              _message,
                               textAlign: TextAlign.center,
-                              style: const TextStyle(fontSize: 12),
-                            ),
-                            if (_aiMessage!.contains('إعادة المحاولة'))
-                              TextButton(
-                                onPressed: _retryAi,
-                                child: const Text('إعادة المحاولة'),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w600,
                               ),
-                          ],
-                          const SizedBox(height: 10),
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(8),
-                            child: LinearProgressIndicator(
-                              value: _busy ? null : _progress,
                             ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            _busy
-                                ? 'لا تغلق التطبيق أثناء التحليل'
-                                : _aiReady
-                                    ? 'سيبدأ المسح تلقائيًا عند ثبات الوجه'
-                                    : 'جاري تجهيز محرك الذكاء الاصطناعي…',
-                            textAlign: TextAlign.center,
-                          ),
-                        ],
+                            if (_aiMessage != null && !_aiReady) ...[
+                              const SizedBox(height: 6),
+                              Text(
+                                _aiMessage!,
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                              if (_aiMessage!.contains('إعادة المحاولة'))
+                                TextButton(
+                                  onPressed: _retryAi,
+                                  child: const Text('إعادة المحاولة'),
+                                ),
+                            ],
+                            const SizedBox(height: 10),
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: LinearProgressIndicator(
+                                value: _busy ? null : _progress,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              _busy
+                                  ? 'لا تغلق التطبيق أثناء التحليل'
+                                  : _aiReady
+                                  ? 'سيبدأ المسح تلقائيًا عند ثبات الوجه'
+                                  : 'جاري تجهيز محرك الذكاء الاصطناعي…',
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
-                ),
-              ],
-            ),
+                ],
+              ),
     );
   }
 }
@@ -456,17 +461,19 @@ class _ScanPainter extends CustomPainter {
       height: size.height * 0.46,
     );
     final radius = Radius.circular(rect.width * 0.32);
-    final borderPaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 4
-      ..color = hasFace ? Colors.greenAccent : Colors.white70;
+    final borderPaint =
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 4
+          ..color = hasFace ? Colors.greenAccent : Colors.white70;
     canvas.drawRRect(RRect.fromRectAndRadius(rect, radius), borderPaint);
 
-    final progressPaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 6
-      ..strokeCap = StrokeCap.round
-      ..color = Colors.lightBlueAccent;
+    final progressPaint =
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 6
+          ..strokeCap = StrokeCap.round
+          ..color = Colors.lightBlueAccent;
     final progressRect = rect.deflate(3);
     canvas.drawArc(
       progressRect,
@@ -478,9 +485,10 @@ class _ScanPainter extends CustomPainter {
 
     if (hasFace) {
       final y = size.height * scanFraction;
-      final linePaint = Paint()
-        ..strokeWidth = 2
-        ..color = Colors.lightBlueAccent.withValues(alpha: 0.9);
+      final linePaint =
+          Paint()
+            ..strokeWidth = 2
+            ..color = Colors.lightBlueAccent.withValues(alpha: 0.9);
       canvas.drawLine(
         Offset(rect.left + 18, y),
         Offset(rect.right - 18, y),

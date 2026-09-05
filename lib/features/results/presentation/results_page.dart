@@ -113,9 +113,9 @@ class _MatchCard extends StatelessWidget {
                 ),
                 Text(
                   '$percent%',
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
                 ),
               ],
             ),
@@ -135,9 +135,10 @@ class _MatchCard extends StatelessWidget {
                 ),
                 Expanded(
                   child: _FaceImage(
-                    imageProvider: match.imageUrl == null
-                        ? null
-                        : NetworkImage(match.imageUrl!),
+                    imageProvider:
+                        match.imageUrl == null
+                            ? null
+                            : NetworkImage(match.imageUrl!),
                     label: match.name,
                   ),
                 ),
@@ -169,19 +170,23 @@ class _FaceImage extends StatelessWidget {
           borderRadius: BorderRadius.circular(14),
           child: AspectRatio(
             aspectRatio: 1,
-            child: imageProvider == null
-                ? const ColoredBox(
-                    color: Color(0xFFECECEC),
-                    child: Center(child: Icon(Icons.person, size: 42)),
-                  )
-                : Image(
-                    image: imageProvider!,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => const ColoredBox(
+            child:
+                imageProvider == null
+                    ? const ColoredBox(
                       color: Color(0xFFECECEC),
-                      child: Center(child: Icon(Icons.broken_image, size: 36)),
+                      child: Center(child: Icon(Icons.person, size: 42)),
+                    )
+                    : Image(
+                      image: imageProvider!,
+                      fit: BoxFit.cover,
+                      errorBuilder:
+                          (_, __, ___) => const ColoredBox(
+                            color: Color(0xFFECECEC),
+                            child: Center(
+                              child: Icon(Icons.broken_image, size: 36),
+                            ),
+                          ),
                     ),
-                  ),
           ),
         ),
         const SizedBox(height: 6),
