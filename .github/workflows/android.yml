@@ -37,6 +37,14 @@ jobs:
             git push origin HEAD:${GITHUB_REF_NAME}
           fi
 
+      - name: Download bundled face model
+        run: |
+          mkdir -p assets/models
+          curl -L --fail --retry 3 \
+            -o assets/models/librefacerec-l.onnx \
+            https://huggingface.co/LibreYOLO/librefacerec-l/resolve/main/librefacerec-l.onnx
+          echo "a7933ea5330113b01c9b60351d8f4c33003f145d847ac5f0e52ee2effe25c60  assets/models/librefacerec-l.onnx" | sha256sum -c -
+
       - name: Get dependencies
         run: flutter pub get
 
