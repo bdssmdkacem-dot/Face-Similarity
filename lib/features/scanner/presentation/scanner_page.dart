@@ -30,10 +30,12 @@ class _ScannerPageState extends State<ScannerPage>
   bool _busy = false;
   bool _processingFrame = false;
   bool _autoScanStarted = false;
+  bool _aiReady = false;
   int _stableFrames = 0;
   Face? _realtimeFace;
   String _message = 'وجّه وجهك داخل الإطار';
   double _progress = 0;
+  String? _aiMessage;
 
   @override
   void initState() {
@@ -43,6 +45,29 @@ class _ScannerPageState extends State<ScannerPage>
       duration: const Duration(milliseconds: 1800),
     )..repeat();
     _initCamera();
+    _warmUpAi();
+  }
+
+  Future<void> _warmUpAi() async {
+    try {
+      await _embedding.warmUp(
+        onStatus: (status) {
+          if (mounted) setState(() => _aiMessage = status);
+        },
+      );
+      if (mounted) {
+        setState(() {
+          _aiReady = true;
+          _aiMessage = '✓ محرك الذكاء الاصطناعي جاهز';
+        });
+      }
+    } catch (error, stack) {
+      debugPrint('Shabah AI warm-up failed: $error');
+      debugPrintStack(stackTrace: stack);
+      if (mounted) {
+        setState(() => _aiMessage = 'تعذر تجهيز محرك الذكاء الاصطناعي.');
+      }
+    }
   }
 
   Future<void> _initCamera() async {
@@ -90,15 +115,13 @@ class _ScannerPageState extends State<ScannerPage>
 
       if (faces.length != 1) {
         _stableFrames = 0;
-        if (mounted) {
-          setState(() {
-            _realtimeFace = null;
-            _progress = 0;
-            _message = faces.isEmpty
-                ? 'وجّه وجهك داخل الإطار'
-                : 'يجب أن يظهر وجه واحد فقط';
-          });
-        }
+        setState(() {
+          _realtimeFace = null;
+          _progress = 0;
+          _message = faces.isEmpty
+              ? 'وجّه وجهك داخل الإطار'
+              : 'يجب أن يظهر وجه واحد فقط';
+        });
         return;
       }
 
@@ -107,29 +130,25 @@ class _ScannerPageState extends State<ScannerPage>
       final pitch = face.headEulerAngleX?.abs() ?? 0;
       if (yaw > 25 || pitch > 25) {
         _stableFrames = 0;
-        if (mounted) {
-          setState(() {
-            _realtimeFace = face;
-            _progress = 0;
-            _message = 'وجّه وجهك نحو الكاميرا مباشرة';
-          });
-        }
+        setState(() {
+          _realtimeFace = face;
+          _progress = 0;
+          _message = 'وجّه وجهك نحو الكاميرا مباشرة';
+        });
         return;
       }
 
       _stableFrames++;
       final progress = (_stableFrames / 8).clamp(0.0, 1.0);
-      if (mounted) {
-        setState(() {
-          _realtimeFace = face;
-          _progress = progress;
-          _message = progress >= 1
-              ? '✓ تم تثبيت الوجه — جاري المسح…'
-              : 'ثبّت وجهك… ${(progress * 100).round()}%';
-        });
-      }
+      setState(() {
+        _realtimeFace = face;
+        _progress = progress;
+        _message = progress >= 1
+            ? '✓ تم تثبيت الوجه — جاري المسح…'
+            : 'ثبّت وجهك… ${(progress * 100).round()}%';
+      });
 
-      if (_stableFrames >= 8 && !_autoScanStarted) {
+      if (_stableFrames >= 8 && !_autoScanStarted && _aiReady) {
         _autoScanStarted = true;
         await _scan();
       }
@@ -330,6 +349,14 @@ class _ScannerPageState extends State<ScannerPage>
                             textAlign: TextAlign.center,
                             style: const TextStyle(fontWeight: FontWeight.w600),
                           ),
+                          if (_aiMessage != null && !_aiReady) ...[
+                            const SizedBox(height: 6),
+                            Text(
+                              _aiMessage!,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                          ],
                           const SizedBox(height: 10),
                           ClipRRect(
                             borderRadius: BorderRadius.circular(8),
@@ -341,7 +368,9 @@ class _ScannerPageState extends State<ScannerPage>
                           Text(
                             _busy
                                 ? 'لا تغلق التطبيق أثناء التحليل'
-                                : 'سيبدأ المسح تلقائيًا عند ثبات الوجه',
+                                : _aiReady
+                                    ? 'سيبدأ المسح تلقائيًا عند ثبات الوجه'
+                                    : 'جاري تجهيز محرك الذكاء الاصطناعي…',
                             textAlign: TextAlign.center,
                           ),
                         ],
