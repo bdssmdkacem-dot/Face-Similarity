@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class CelebrityMatch {
@@ -41,18 +43,27 @@ class CelebrityMatchRepository {
       );
     }
 
-    final result = await _client.rpc(
-      'match_celebrity_faces',
-      params: {
-        'query_embedding': embedding,
-        'match_count': limit,
-      },
-    );
+    final result = await _client
+        .rpc(
+          'match_celebrity_faces',
+          params: {
+            'query_embedding': embedding,
+            'match_count': limit,
+          },
+        )
+        .timeout(
+          const Duration(seconds: 20),
+          onTimeout: () => throw TimeoutException(
+            'البحث عن النتائج تجاوز 20 ثانية.',
+          ),
+        );
 
     return (result as List)
-        .map((row) => CelebrityMatch.fromMap(
-              Map<String, dynamic>.from(row as Map),
-            ))
+        .map(
+          (row) => CelebrityMatch.fromMap(
+            Map<String, dynamic>.from(row as Map),
+          ),
+        )
         .toList(growable: false);
   }
 }
