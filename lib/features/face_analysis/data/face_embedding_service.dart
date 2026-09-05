@@ -20,6 +20,13 @@ class FaceEmbeddingService {
 
   final FaceAlignmentService _alignment = FaceAlignmentService();
   OrtSession? _session;
+  Future<OrtSession>? _sessionFuture;
+
+  Future<void> warmUp({void Function(String status)? onStatus}) async {
+    onStatus?.call('🧠 تجهيز محرك الذكاء الاصطناعي…');
+    await _getSession(onStatus: onStatus);
+    onStatus?.call('✓ محرك الذكاء الاصطناعي جاهز.');
+  }
 
   Future<List<double>> embed({
     required String imagePath,
@@ -71,16 +78,34 @@ class FaceEmbeddingService {
 
   Future<OrtSession> _getSession({void Function(String status)? onStatus}) async {
     if (_session != null) return _session!;
+    final pending = _sessionFuture;
+    if (pending != null) return pending;
+
+    final future = _createSession(onStatus: onStatus);
+    _sessionFuture = future;
+    try {
+      final session = await future;
+      _session = session;
+      return session;
+    } catch (_) {
+      if (identical(_sessionFuture, future)) _sessionFuture = null;
+      rethrow;
+    } finally {
+      if (identical(_sessionFuture, future)) _sessionFuture = null;
+    }
+  }
+
+  Future<OrtSession> _createSession({void Function(String status)? onStatus}) async {
     onStatus?.call('جاري تجهيز نموذج الوجه…');
     final modelFile = await _ensureModelFile(onStatus: onStatus);
     onStatus?.call('جاري تحميل النموذج داخل الجهاز…');
     final runtime = OnnxRuntime();
-    final session = await runtime.createSession(modelFile.path).timeout(
+    return runtime.createSession(modelFile.path).timeout(
       const Duration(seconds: 90),
-      onTimeout: () => throw TimeoutException('تحميل نموذج الوجه داخل ONNX Runtime تجاوز 90 ثانية.'),
+      onTimeout: () => throw TimeoutException(
+        'تحميل نموذج الوجه داخل ONNX Runtime تجاوز 90 ثانية.',
+      ),
     );
-    _session = session;
-    return session;
   }
 
   Future<File> _ensureModelFile({void Function(String status)? onStatus}) async {
@@ -172,6 +197,7 @@ class FaceEmbeddingService {
   Future<void> dispose() async {
     final session = _session;
     _session = null;
+    _sessionFuture = null;
     if (session != null) await session.close();
   }
 }
