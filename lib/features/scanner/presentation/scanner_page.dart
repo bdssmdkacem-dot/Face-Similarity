@@ -12,6 +12,7 @@ import '../../results/presentation/results_page.dart';
 
 class ScannerPage extends StatefulWidget {
   const ScannerPage({super.key});
+
   @override
   State<ScannerPage> createState() => _ScannerPageState();
 }
@@ -22,57 +23,167 @@ class _ScannerPageState extends State<ScannerPage> {
   CameraController? _controller;
   bool _busy = false;
   String? _message;
+
   @override
-  void initState() { super.initState(); _initCamera(); }
+  void initState() {
+    super.initState();
+    _initCamera();
+  }
+
   Future<void> _initCamera() async {
     try {
       final cameras = await availableCameras();
-      if (cameras.isEmpty) { if (mounted) setState(() => _message = 'لم يتم العثور على كاميرا.'); return; }
-      final front = cameras.firstWhere((c) => c.lensDirection == CameraLensDirection.front, orElse: () => cameras.first);
-      final controller = CameraController(front, ResolutionPreset.medium, enableAudio: false);
+      if (cameras.isEmpty) {
+        if (mounted) setState(() => _message = 'لم يتم العثور على كاميرا.');
+        return;
+      }
+      final front = cameras.firstWhere(
+        (c) => c.lensDirection == CameraLensDirection.front,
+        orElse: () => cameras.first,
+      );
+      final controller = CameraController(
+        front,
+        ResolutionPreset.medium,
+        enableAudio: false,
+      );
       await controller.initialize();
-      if (!mounted) { await controller.dispose(); return; }
+      if (!mounted) {
+        await controller.dispose();
+        return;
+      }
       setState(() => _controller = controller);
     } catch (error, stack) {
-      debugPrint('Shabah camera initialization failed: $error'); debugPrintStack(stackTrace: stack);
+      debugPrint('Shabah camera initialization failed: $error');
+      debugPrintStack(stackTrace: stack);
       if (mounted) setState(() => _message = 'تعذر تشغيل الكاميرا.');
     }
   }
+
   Future<void> _deleteCapturedFile(String path) async {
-    try { final file = File(path); if (await file.exists()) await file.delete(); } catch (_) {}
+    try {
+      final file = File(path);
+      if (await file.exists()) await file.delete();
+    } catch (_) {}
   }
+
   Future<void> _scan() async {
     final controller = _controller;
     if (controller == null || !controller.value.isInitialized || _busy) return;
-    setState(() { _busy = true; _message = 'جاري تحليل الوجه…'; });
+
+    setState(() {
+      _busy = true;
+      _message = 'جاري تحليل الوجه…';
+    });
+
     String? capturedPath;
     try {
-      final file = await controller.takePicture(); capturedPath = file.path;
+      final file = await controller.takePicture();
+      capturedPath = file.path;
       final validation = await _faceDetection.detectAndValidate(file.path);
-      if (!validation.isValid || validation.face == null) { if (mounted) setState(() { _busy = false; _message = validation.message; }); return; }
-      if (!SupabaseConfig.isConfigured) { if (mounted) setState(() { _busy = false; _message = 'Supabase غير مُهيأ. أضف مفتاح النشر أولاً.'; }); return; }
+      if (!validation.isValid || validation.face == null) {
+        if (mounted) {
+          setState(() {
+            _busy = false;
+            _message = validation.message;
+          });
+        }
+        return;
+      }
+
+      if (!SupabaseConfig.isConfigured) {
+        if (mounted) {
+          setState(() {
+            _busy = false;
+            _message = 'Supabase غير مُهيأ. أضف مفتاح النشر أولاً.';
+          });
+        }
+        return;
+      }
+
       setState(() => _message = 'جاري إنشاء بصمة الوجه…');
-      final embedding = await _embedding.embed(imagePath: file.path, face: validation.face!, onStatus: (status) { if (mounted) setState(() => _message = status); });
+      final embedding = await _embedding.embed(
+        imagePath: file.path,
+        face: validation.face!,
+        onStatus: (status) {
+          if (mounted) setState(() => _message = status);
+        },
+      );
       if (!mounted) return;
+
       setState(() => _message = 'جاري البحث عن أقرب المشاهير…');
-      final matches = await CelebrityMatchRepository().matchEmbedding(embedding, limit: 5);
-      await _deleteCapturedFile(file.path); capturedPath = null;
+      final matches = await CelebrityMatchRepository().matchEmbedding(
+        embedding,
+        limit: 5,
+      );
+
       if (!mounted) return;
-      await Navigator.of(context).push(MaterialPageRoute(builder: (_) => ResultsPage(matches: matches)));
+      // Keep the captured image available while ResultsPage displays it.
+      // ResultsPage deletes it when the user leaves the results screen.
+      final resultImagePath = file.path;
+      capturedPath = null;
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => ResultsPage(
+            matches: matches,
+            userImagePath: resultImagePath,
+          ),
+        ),
+      );
       if (mounted) setState(() => _busy = false);
     } catch (error, stack) {
-      debugPrint('Shabah scan failed: $error'); debugPrintStack(stackTrace: stack);
-      if (mounted) setState(() { _busy = false; _message = error is TimeoutException ? 'استغرق تحليل الوجه وقتًا أطول من المتوقع. حاول مرة أخرى.' : 'تعذر إكمال التحليل. تحقق من الاتصال ثم حاول مرة أخرى.'; });
-    } finally { final path = capturedPath; if (path != null) await _deleteCapturedFile(path); }
+      debugPrint('Shabah scan failed: $error');
+      debugPrintStack(stackTrace: stack);
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _message = error is TimeoutException
+              ? 'استغرق تحليل الوجه وقتًا أطول من المتوقع. حاول مرة أخرى.'
+              : 'تعذر إكمال التحليل. تحقق من الاتصال ثم حاول مرة أخرى.';
+        });
+      }
+    } finally {
+      final path = capturedPath;
+      if (path != null) await _deleteCapturedFile(path);
+    }
   }
+
   @override
-  void dispose() { _controller?.dispose(); _faceDetection.dispose(); _embedding.dispose(); super.dispose(); }
+  void dispose() {
+    _controller?.dispose();
+    _faceDetection.dispose();
+    _embedding.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final controller = _controller;
     return Scaffold(
       appBar: AppBar(title: const Text('مسح الوجه')),
-      body: controller == null ? Center(child: _message == null ? const CircularProgressIndicator() : Text(_message!)) : Column(children: [Expanded(child: CameraPreview(controller)), if (_message != null) Padding(padding: const EdgeInsets.all(12), child: Text(_message!, textAlign: TextAlign.center)), Padding(padding: const EdgeInsets.all(20), child: FilledButton.icon(onPressed: _busy ? null : _scan, icon: const Icon(Icons.auto_awesome), label: const Text('اكتشف شَبَهِي')))]),
+      body: controller == null
+          ? Center(
+              child: _message == null
+                  ? const CircularProgressIndicator()
+                  : Text(_message!),
+            )
+          : Column(
+              children: [
+                Expanded(child: CameraPreview(controller)),
+                if (_message != null)
+                  Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Text(_message!, textAlign: TextAlign.center),
+                  ),
+                Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: FilledButton.icon(
+                    onPressed: _busy ? null : _scan,
+                    icon: const Icon(Icons.auto_awesome),
+                    label: const Text('اكتشف شَبَهِي'),
+                  ),
+                ),
+              ],
+            ),
     );
   }
 }
