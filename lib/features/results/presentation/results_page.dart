@@ -50,7 +50,7 @@ class _ResultsPageState extends State<ResultsPage> {
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 20),
-          if (matches.isEmpty)
+          if (widget.matches.isEmpty)
             const Card(
               child: Padding(
                 padding: EdgeInsets.all(24),
