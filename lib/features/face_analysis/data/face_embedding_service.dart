@@ -13,6 +13,7 @@ import 'face_alignment_service.dart';
 
 class FaceEmbeddingService {
   static const _modelFileName = 'librefacerec-l.onnx';
+  static const _modelAsset = 'assets/models/librefacerec-l.onnx';
   static const _modelUrl =
       'https://huggingface.co/LibreYOLO/librefacerec-l/resolve/main/librefacerec-l.onnx';
   static const _expectedSha256 =
@@ -98,16 +99,26 @@ class FaceEmbeddingService {
   }
 
   Future<OrtSession> _createSession({void Function(String status)? onStatus}) async {
-    onStatus?.call('جاري تجهيز نموذج الوجه…');
-    final modelFile = await _ensureModelFile(onStatus: onStatus);
-    onStatus?.call('جاري تحميل النموذج داخل الجهاز…');
     final runtime = OnnxRuntime();
-    return runtime.createSession(modelFile.path).timeout(
-      const Duration(seconds: 90),
-      onTimeout: () => throw TimeoutException(
-        'تحميل نموذج الوجه داخل ONNX Runtime تجاوز 90 ثانية.',
-      ),
-    );
+    try {
+      onStatus?.call('جاري تحميل نموذج الوجه المضمن داخل التطبيق…');
+      return await runtime.createSessionFromAsset(_modelAsset).timeout(
+        const Duration(seconds: 90),
+        onTimeout: () => throw TimeoutException(
+          'تحميل نموذج الوجه داخل ONNX Runtime تجاوز 90 ثانية.',
+        ),
+      );
+    } catch (assetError) {
+      debugPrint('Bundled face model unavailable, using network fallback: $assetError');
+      onStatus?.call('النموذج المضمن غير متوفر — جاري تنزيله لأول مرة…');
+      final modelFile = await _ensureModelFile(onStatus: onStatus);
+      return runtime.createSession(modelFile.path).timeout(
+        const Duration(seconds: 90),
+        onTimeout: () => throw TimeoutException(
+          'تحميل نموذج الوجه داخل ONNX Runtime تجاوز 90 ثانية.',
+        ),
+      );
+    }
   }
 
   Future<File> _ensureModelFile({void Function(String status)? onStatus}) async {
