@@ -82,7 +82,8 @@ class FaceEmbeddingService {
     final pending = _sessionFuture;
     if (pending != null) return pending;
 
-    final future = _createSession(onStatus: onStatus);
+    late final Future<OrtSession> future;
+    future = _createSession(onStatus: onStatus);
     _sessionFuture = future;
     try {
       final session = await future;
