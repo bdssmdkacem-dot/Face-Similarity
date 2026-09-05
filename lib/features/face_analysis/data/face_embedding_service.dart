@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
-import 'dart:typed_data';
 import 'dart:ui' show Rect;
 
 import 'package:crypto/crypto.dart';
@@ -53,8 +52,8 @@ class FaceEmbeddingService {
       final session = await runtime.createSession(modelFile.path).timeout(const Duration(seconds: 90), onTimeout: () => throw TimeoutException('تحميل نموذج الوجه داخل ONNX Runtime تجاوز 90 ثانية.'));
       _session = session;
       return session;
-    } catch (_) {
-      rethrow;
+    } finally {
+      await runtime.close();
     }
   }
 
