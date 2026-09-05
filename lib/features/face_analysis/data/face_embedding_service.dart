@@ -16,7 +16,6 @@ class FaceEmbeddingService {
   static const _modelUrl = 'https://huggingface.co/LibreYOLO/librefacerec-l/resolve/main/librefacerec-l.onnx';
   static const _expectedSha256 = 'a7933ea5330113b01c9b60351d8f4c33003f145d8470ac5f0e52ee2effe25c60';
 
-  OrtRuntime? _runtime;
   OrtSession? _session;
 
   Future<List<double>> embed({required String imagePath, required Face face, void Function(String status)? onStatus}) async {
@@ -49,14 +48,12 @@ class FaceEmbeddingService {
     onStatus?.call('جاري تجهيز نموذج الوجه…');
     final modelFile = await _ensureModelFile(onStatus: onStatus);
     onStatus?.call('جاري تحميل النموذج داخل الجهاز…');
-    final runtime = OrtRuntime();
-    _runtime = runtime;
+    final runtime = OnnxRuntime();
     try {
       final session = await runtime.createSession(modelFile.path).timeout(const Duration(seconds: 90), onTimeout: () => throw TimeoutException('تحميل نموذج الوجه داخل ONNX Runtime تجاوز 90 ثانية.'));
       _session = session;
       return session;
     } catch (_) {
-      _runtime = null;
       rethrow;
     }
   }
@@ -116,5 +113,5 @@ class FaceEmbeddingService {
 
   List<double> _l2Normalize(List<double> vector) { final norm = math.sqrt(vector.fold<double>(0, (sum, value) => sum + value * value)); if (norm == 0) throw StateError('Embedding norm is zero.'); return vector.map((value) => value / norm).toList(growable: false); }
 
-  Future<void> dispose() async { final session = _session; _session = null; if (session != null) await session.close(); _runtime = null; }
+  Future<void> dispose() async { final session = _session; _session = null; if (session != null) await session.close(); }
 }
