@@ -65,9 +65,21 @@ class _ScannerPageState extends State<ScannerPage>
       debugPrint('Shabah AI warm-up failed: $error');
       debugPrintStack(stackTrace: stack);
       if (mounted) {
-        setState(() => _aiMessage = 'تعذر تجهيز محرك الذكاء الاصطناعي.');
+        setState(() {
+          _aiReady = false;
+          _aiMessage = 'تعذر تجهيز محرك الذكاء الاصطناعي. اضغط إعادة المحاولة.';
+        });
       }
     }
+  }
+
+  Future<void> _retryAi() async {
+    if (_busy) return;
+    setState(() {
+      _aiMessage = 'جاري إعادة تجهيز محرك الذكاء الاصطناعي…';
+      _aiReady = false;
+    });
+    await _warmUpAi();
   }
 
   Future<void> _initCamera() async {
@@ -356,6 +368,11 @@ class _ScannerPageState extends State<ScannerPage>
                               textAlign: TextAlign.center,
                               style: const TextStyle(fontSize: 12),
                             ),
+                            if (_aiMessage!.contains('إعادة المحاولة'))
+                              TextButton(
+                                onPressed: _retryAi,
+                                child: const Text('إعادة المحاولة'),
+                              ),
                           ],
                           const SizedBox(height: 10),
                           ClipRRect(
