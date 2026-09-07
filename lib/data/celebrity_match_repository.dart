@@ -60,10 +60,7 @@ class CelebrityMatchRepository {
     final result = await _client
         .rpc(
           'match_celebrity_faces',
-          params: {
-            'query_embedding': embedding,
-            'match_count': matchCount,
-          },
+          params: {'query_embedding': embedding, 'match_count': matchCount},
         )
         .timeout(
           const Duration(seconds: 20),
@@ -77,9 +74,8 @@ class CelebrityMatchRepository {
 
     return result
         .map(
-          (row) => CelebrityMatch.fromMap(
-            Map<String, dynamic>.from(row as Map),
-          ),
+          (row) =>
+              CelebrityMatch.fromMap(Map<String, dynamic>.from(row as Map)),
         )
         .toList(growable: false);
   }
